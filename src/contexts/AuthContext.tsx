@@ -1,0 +1,2692 @@
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+  GoogleAuthProvider,
+  User,
+  createUserWithEmailAndPassword,
+  linkWithPopup,
+  onAuthStateChanged,
+  reauthenticateWithPopup,
+  sendEmailVerification,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut,
+  updateProfile,
+} from 'firebase/auth';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
+import {
+  OperationType,
+  auth,
+  db,
+  googleAuthProvider,
+  handleFirestoreError,
+  isAdminEmail,
+  testFirestoreConnection,
+  toFamilyMemberDocId,
+  workspaceAuthProvider,
+} from '../lib/firebase';
+import { ALEPA_DISCIPLINES, CONCURSO_PROFILE } from '../data/alepaSyllabus';
+import { getMedioDisciplines } from '../data/alepaMedioSyllabus';
+import { CETAP_QUESTIONS, DEFAULT_STUDY_MATERIALS } from '../data/alepaQuestions';
+import { EXTRA_CURATED_QUESTIONS } from '../data/alepaExtraQuestions';
+import { GERAL_DEFAULT_MATERIALS } from '../data/alepaGeneralLibrary';
+import { MEDIO_DEFAULT_MATERIALS, MEDIO_QUESTIONS } from '../data/alepaMedioLibrary';
+import {
+  AccessSession,
+  BlockType,
+  CampusLevel,
+  Discipline,
+  DisciplineWeeklyGoal,
+  ErrorEntry,
+  ErrorReason,
+  FamilyMember,
+  LibraryCategoryId,
+  LibraryScope,
+  LinkStatus,
+  ManagedDiscipline,
+  ManagedTopic,
+  MaterialFileType,
+  MaterialRelevanceTier,
+  MedioCargoGroup,
+  NormalizedUserRole,
+  PlatformNotice,
+  PublicationStatus,
+  Question,
+  QuestionOriginType,
+  ReadingProgress,
+  ResourceType,
+  SimuladoAttempt,
+  SimuladoList,
+  StudyMaterial,
+  StudySession,
+  TopicProgress,
+  UserProfile,
+  UserRole,
+  canManageUsersRole,
+  isStaffRole,
+  normalizeUserRole,
+} from '../types';
+
+export type WorkspaceMode = 'student' | 'admin';
+
+interface AuthContextValue {
+  user: User | null;
+  isGuest: boolean;
+  profile: UserProfile | null;
+  authLoading: boolean;
+  syncError: string | null;
+  clearSyncError: () => void;
+  workspaceAccessToken: string | null;
+  connectGoogleWorkspace: () => Promise<string | null>;
+  clearWorkspaceToken: () => void;
+  effectiveRole: NormalizedUserRole;
+  isAdmin: boolean;
+  isEditor: boolean;
+  isDev: boolean;
+  canAccessAdminPanel: boolean;
+  canManageUsers: boolean;
+  canPublishShared: boolean;
+  activeWorkspaceMode: WorkspaceMode;
+  setActiveWorkspaceMode: (mode: WorkspaceMode) => void;
+  getIdToken: () => Promise<string | null>;
+  myFamilyMembership: FamilyMember | null;
+  familyMembers: FamilyMember[];
+  accessSessions: AccessSession[];
+  allUsers: UserProfile[];
+  updateAccessPresenceContext: (tab: string, campus: CampusLevel) => void;
+  inviteFamilyMember: (input: {
+    name: string;
+    email: string;
+    relationship: string;
+    canPublish: boolean;
+  }) => Promise<void>;
+  toggleFamilyMemberPublish: (memberId: string, canPublish: boolean) => Promise<void>;
+  toggleFamilyMemberActive: (memberId: string, active: boolean) => Promise<void>;
+  removeFamilyMember: (memberId: string) => Promise<void>;
+  topicProgressMap: Record<string, TopicProgress>;
+  disciplineGoalsMap: Record<string, DisciplineWeeklyGoal>;
+  readingProgressMap: Record<string, ReadingProgress>;
+  studySessions: StudySession[];
+  simuladoAttempts: SimuladoAttempt[];
+  errorNotebook: ErrorEntry[];
+  materials: StudyMaterial[];
+  allManagedMaterials: StudyMaterial[];
+  questions: Question[];
+  allManagedQuestions: Question[];
+  managedDisciplines: ManagedDiscipline[];
+  allManagedDisciplines: ManagedDiscipline[];
+  managedTopics: ManagedTopic[];
+  allManagedTopics: ManagedTopic[];
+  simuladoLists: SimuladoList[];
+  allManagedSimuladoLists: SimuladoList[];
+  platformNotices: PlatformNotice[];
+  allManagedNotices: PlatformNotice[];
+  getCampusDisciplines: (campus: CampusLevel, medioCargoGroup?: MedioCargoGroup) => Discipline[];
+  loginWithEmail: (email: string, password: string) => Promise<void>;
+  registerWithEmail: (email: string, password: string, displayName: string, preferredRole: UserRole) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  enterGuestMode: () => void;
+  exitGuestMode: () => void;
+  resendVerification: () => Promise<void>;
+  refreshAuthState: () => Promise<void>;
+  logout: () => Promise<void>;
+  updateProfileSettings: (patch: {
+    displayName?: string;
+    dailyGoalMinutes?: number;
+    examDate?: string;
+    targetCargo?: string;
+  }) => Promise<void>;
+  updateUserRole: (targetUid: string, nextRole: NormalizedUserRole) => Promise<void>;
+  saveDisciplineWeeklyGoal: (disciplineId: string, weeklyGoalMinutes: number) => Promise<void>;
+  saveTopicProgress: (
+    topicId: string,
+    disciplineId: string,
+    patch: Partial<Pick<TopicProgress, 'theoryDone' | 'questionsDone' | 'revisionDone' | 'notes'>>
+  ) => Promise<void>;
+  saveReadingProgress: (
+    materialId: string,
+    patch: Partial<Omit<ReadingProgress, 'materialId' | 'userId' | 'updatedAt'>>
+  ) => Promise<void>;
+  deleteReadingProgress: (materialId: string) => Promise<void>;
+  logStudySession: (input: {
+    dateKey: string;
+    disciplineId: string;
+    topicTitle: string;
+    blockType: BlockType;
+    durationMinutes: number;
+    notes?: string;
+  }) => Promise<void>;
+  saveSimuladoAttempt: (input: {
+    title: string;
+    mode: 'treino' | 'simulado';
+    primaryDisciplineId: string;
+    totalQuestions: number;
+    correctCount: number;
+    score: number;
+    durationSeconds: number;
+  }) => Promise<void>;
+  addErrorEntry: (input: {
+    questionId: string;
+    disciplineId: string;
+    topicTitle: string;
+    questionStem: string;
+    correctOption: string;
+    selectedOption: string;
+    errorReason: ErrorReason;
+    improvementNote: string;
+  }) => Promise<void>;
+  updateErrorEntry: (
+    entryId: string,
+    patch: Partial<Pick<ErrorEntry, 'errorReason' | 'improvementNote' | 'nextReviewDate' | 'reviewCount' | 'status'>>
+  ) => Promise<void>;
+  deleteErrorEntry: (entryId: string) => Promise<void>;
+  addMaterial: (input: {
+    title: string;
+    disciplineId: string;
+    libraryCategoryId?: LibraryCategoryId;
+    editalTopic?: string;
+    resourceType?: ResourceType;
+    fileType: MaterialFileType;
+    institution?: string;
+    url: string;
+    pricing?: 'gratuito' | 'pago';
+    publishedAt?: string;
+    lastVerifiedAt?: string;
+    linkStatus?: LinkStatus;
+    isOfficialContent?: boolean;
+    relevanceTier?: MaterialRelevanceTier;
+    campusLevel?: LibraryScope;
+    status?: PublicationStatus;
+    fileName?: string;
+    description?: string;
+    isShared?: boolean;
+    allowDownload?: boolean;
+    textLayerStatus?: StudyMaterial['textLayerStatus'];
+    pageCount?: number;
+    fileSizeBytes?: number;
+    version?: number;
+    versionNote?: string;
+  }) => Promise<void>;
+  updateMaterial: (
+    materialId: string,
+    patch: Partial<Omit<StudyMaterial, 'id' | 'ownerId' | 'createdAt'>>
+  ) => Promise<void>;
+  updateMaterialStatus: (materialId: string, status: PublicationStatus) => Promise<void>;
+  deleteMaterial: (materialId: string) => Promise<void>;
+  addCustomQuestion: (input: {
+    disciplineId: string;
+    topicTitle: string;
+    statement: string;
+    options: [string, string, string, string, string];
+    correctIndex: number;
+    explanation: string;
+    legalBasis?: string;
+    source?: string;
+    originType?: QuestionOriginType;
+    escolaridade?: CampusLevel;
+    isOfficial?: boolean;
+    isPublished?: boolean;
+    status?: PublicationStatus;
+  }) => Promise<void>;
+  updateCustomQuestion: (
+    questionId: string,
+    patch: Partial<Omit<Question, 'id' | 'authorId'>>
+  ) => Promise<void>;
+  updateQuestionStatus: (questionId: string, status: PublicationStatus) => Promise<void>;
+  deleteCustomQuestion: (questionId: string) => Promise<void>;
+  saveManagedDiscipline: (input: {
+    id?: string;
+    name: string;
+    shortName: string;
+    campusLevel: CampusLevel;
+    editalBlock: Discipline['editalBlock'];
+    priorityRank: number;
+    examQuestions: number;
+    examPoints: number;
+    tieBreakerOrder: number;
+    recommendedMinutesPerCycle: number;
+    status: PublicationStatus;
+  }) => Promise<string>;
+  updateManagedDisciplineStatus: (disciplineId: string, status: PublicationStatus) => Promise<void>;
+  saveManagedTopic: (input: {
+    topicId?: string;
+    disciplineId: string;
+    campusLevel: CampusLevel;
+    title: string;
+    subtopics: string[];
+    highYield: boolean;
+    order: number;
+    status: PublicationStatus;
+  }) => Promise<string>;
+  updateManagedTopicStatus: (topicId: string, status: PublicationStatus) => Promise<void>;
+  saveSimuladoList: (input: {
+    listId?: string;
+    title: string;
+    description?: string;
+    campusLevel: LibraryScope;
+    durationMinutes: number;
+    questionIds: string[];
+    status: PublicationStatus;
+  }) => Promise<string>;
+  updateSimuladoListStatus: (listId: string, status: PublicationStatus) => Promise<void>;
+  savePlatformNotice: (input: {
+    noticeId?: string;
+    title: string;
+    body: string;
+    campusLevel: LibraryScope;
+    priority: 'normal' | 'importante' | 'urgente';
+    eventDate?: string;
+    status: PublicationStatus;
+  }) => Promise<string>;
+  updatePlatformNoticeStatus: (noticeId: string, status: PublicationStatus) => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+function sanitizeId(raw: string): string {
+  return raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120) || `id_${Date.now()}`;
+}
+
+function addDaysIso(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+const GUEST_MODE_KEY = 'concurso_alepa_guest_mode';
+const GUEST_DATA_KEY = 'concurso_alepa_guest_data_v1';
+const DEVICE_ID_KEY = 'concurso_alepa_device_id_v1';
+const GUEST_UID = 'guest_local';
+
+function getOrCreateDeviceId(): string {
+  try {
+    const existing = localStorage.getItem(DEVICE_ID_KEY);
+    if (existing && /^[a-zA-Z0-9_-]{4,80}$/.test(existing)) {
+      return existing;
+    }
+    const created = sanitizeId(`dev_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`).slice(0, 80);
+    localStorage.setItem(DEVICE_ID_KEY, created);
+    return created;
+  } catch {
+    return 'dev_browser';
+  }
+}
+
+function detectDeviceType(): 'mobile' | 'desktop' {
+  if (typeof navigator === 'undefined') return 'desktop';
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+}
+
+interface GuestStoreData {
+  profile: UserProfile;
+  topicProgressMap: Record<string, TopicProgress>;
+  disciplineGoalsMap: Record<string, DisciplineWeeklyGoal>;
+  readingProgressMap: Record<string, ReadingProgress>;
+  studySessions: StudySession[];
+  simuladoAttempts: SimuladoAttempt[];
+  errorNotebook: ErrorEntry[];
+  myMaterials: StudyMaterial[];
+  myQuestions: Question[];
+}
+
+function createDefaultGuestProfile(): UserProfile {
+  return {
+    uid: GUEST_UID,
+    displayName: 'Visitante ALEPA',
+    role: 'student',
+    dailyGoalMinutes: CONCURSO_PROFILE.dailyGoalMinutes,
+    examDate: CONCURSO_PROFILE.examDate,
+    targetCargo: 'Cargo 03 – Técnico Legislativo (PL.AL.102)',
+  };
+}
+
+function loadGuestStore(): GuestStoreData {
+  const fallback: GuestStoreData = {
+    profile: createDefaultGuestProfile(),
+    topicProgressMap: {},
+    disciplineGoalsMap: {},
+    readingProgressMap: {},
+    studySessions: [],
+    simuladoAttempts: [],
+    errorNotebook: [],
+    myMaterials: [],
+    myQuestions: [],
+  };
+  try {
+    const raw = localStorage.getItem(GUEST_DATA_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<GuestStoreData>;
+    return {
+      profile: parsed.profile ? { ...createDefaultGuestProfile(), ...parsed.profile, uid: GUEST_UID } : fallback.profile,
+      topicProgressMap: parsed.topicProgressMap || {},
+      disciplineGoalsMap: parsed.disciplineGoalsMap || {},
+      readingProgressMap: parsed.readingProgressMap || {},
+      studySessions: Array.isArray(parsed.studySessions) ? parsed.studySessions : [],
+      simuladoAttempts: Array.isArray(parsed.simuladoAttempts) ? parsed.simuladoAttempts : [],
+      errorNotebook: Array.isArray(parsed.errorNotebook) ? parsed.errorNotebook : [],
+      myMaterials: Array.isArray(parsed.myMaterials) ? parsed.myMaterials : [],
+      myQuestions: Array.isArray(parsed.myQuestions) ? parsed.myQuestions : [],
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function saveGuestStore(data: GuestStoreData): void {
+  try {
+    localStorage.setItem(GUEST_DATA_KEY, JSON.stringify(data));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isGuest, setIsGuest] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(GUEST_MODE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [, setAuthRefreshTick] = useState(0);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  // In-memory only (never localStorage/sessionStorage) per Workspace security rules
+  const [workspaceAccessToken, setWorkspaceAccessToken] = useState<string | null>(null);
+
+  const [topicProgressMap, setTopicProgressMap] = useState<Record<string, TopicProgress>>({});
+  const [disciplineGoalsMap, setDisciplineGoalsMap] = useState<Record<string, DisciplineWeeklyGoal>>({});
+  const [readingProgressMap, setReadingProgressMap] = useState<Record<string, ReadingProgress>>({});
+  const [studySessions, setStudySessions] = useState<StudySession[]>([]);
+  const [simuladoAttempts, setSimuladoAttempts] = useState<SimuladoAttempt[]>([]);
+  const [errorNotebook, setErrorNotebook] = useState<ErrorEntry[]>([]);
+  const [sharedMaterials, setSharedMaterials] = useState<StudyMaterial[]>([]);
+  const [myMaterials, setMyMaterials] = useState<StudyMaterial[]>([]);
+  const [adminMaterials, setAdminMaterials] = useState<StudyMaterial[]>([]);
+  const [publishedQuestions, setPublishedQuestions] = useState<Question[]>([]);
+  const [myQuestions, setMyQuestions] = useState<Question[]>([]);
+  const [adminQuestions, setAdminQuestions] = useState<Question[]>([]);
+  const [publishedDisciplines, setPublishedDisciplines] = useState<ManagedDiscipline[]>([]);
+  const [adminDisciplines, setAdminDisciplines] = useState<ManagedDiscipline[]>([]);
+  const [publishedTopics, setPublishedTopics] = useState<ManagedTopic[]>([]);
+  const [adminTopics, setAdminTopics] = useState<ManagedTopic[]>([]);
+  const [publishedSimuladoLists, setPublishedSimuladoLists] = useState<SimuladoList[]>([]);
+  const [adminSimuladoLists, setAdminSimuladoLists] = useState<SimuladoList[]>([]);
+  const [publishedNotices, setPublishedNotices] = useState<PlatformNotice[]>([]);
+  const [adminNotices, setAdminNotices] = useState<PlatformNotice[]>([]);
+  const [myFamilyMembership, setMyFamilyMembership] = useState<FamilyMember | null>(null);
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  const [accessSessions, setAccessSessions] = useState<AccessSession[]>([]);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [activeWorkspaceModeState, setActiveWorkspaceModeState] = useState<WorkspaceMode>('student');
+  const presenceContextRef = useRef<{ tab: string; campus: CampusLevel }>({
+    tab: 'dashboard',
+    campus: 'superior',
+  });
+  const deviceIdRef = useRef<string>(getOrCreateDeviceId());
+
+  const isPrimaryAdmin = Boolean(user?.emailVerified && isAdminEmail(user?.email));
+  const isVerifiedUser = Boolean(user?.emailVerified);
+  const effectiveRole: NormalizedUserRole = isVerifiedUser
+    ? normalizeUserRole(profile?.role, isPrimaryAdmin)
+    : 'student';
+  const isAdmin = effectiveRole === 'admin' || effectiveRole === 'dev';
+  const isEditor = effectiveRole === 'editor';
+  const isDev = effectiveRole === 'dev';
+  const canAccessAdminPanel = isStaffRole(effectiveRole, isPrimaryAdmin) && isVerifiedUser;
+  const canManageUsers = canManageUsersRole(effectiveRole, isPrimaryAdmin) && isVerifiedUser;
+  const canPublishShared =
+    canAccessAdminPanel || Boolean(user?.emailVerified && myFamilyMembership?.active && myFamilyMembership?.canPublish);
+
+  useEffect(() => {
+    if (!canAccessAdminPanel && activeWorkspaceModeState !== 'student') {
+      setActiveWorkspaceModeState('student');
+    }
+  }, [canAccessAdminPanel, activeWorkspaceModeState]);
+
+  const setActiveWorkspaceMode = useCallback(
+    (mode: WorkspaceMode) => {
+      if (mode === 'admin' && !canAccessAdminPanel) {
+        setActiveWorkspaceModeState('student');
+        return;
+      }
+      setActiveWorkspaceModeState(mode);
+    },
+    [canAccessAdminPanel]
+  );
+
+  const getIdToken = useCallback(async (): Promise<string | null> => {
+    const current = auth.currentUser;
+    if (!current) return null;
+    try {
+      return await current.getIdToken();
+    } catch {
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    void testFirestoreConnection();
+  }, []);
+
+  const hydrateGuestData = () => {
+    const data = loadGuestStore();
+    setProfile(data.profile);
+    setTopicProgressMap(data.topicProgressMap);
+    setDisciplineGoalsMap(data.disciplineGoalsMap);
+    setReadingProgressMap(data.readingProgressMap);
+    setStudySessions(data.studySessions);
+    setSimuladoAttempts(data.simuladoAttempts);
+    setErrorNotebook(data.errorNotebook);
+    setMyMaterials(data.myMaterials);
+    setMyQuestions(data.myQuestions);
+  };
+
+  const persistGuestPatch = (updater: (prev: GuestStoreData) => GuestStoreData) => {
+    const current = loadGuestStore();
+    const next = updater(current);
+    saveGuestStore(next);
+    setProfile(next.profile);
+    setTopicProgressMap(next.topicProgressMap);
+    setDisciplineGoalsMap(next.disciplineGoalsMap);
+    setReadingProgressMap(next.readingProgressMap);
+    setStudySessions(next.studySessions);
+    setSimuladoAttempts(next.simuladoAttempts);
+    setErrorNotebook(next.errorNotebook);
+    setMyMaterials(next.myMaterials);
+    setMyQuestions(next.myQuestions);
+  };
+
+  const ensureSignedIn = (): User => {
+    const current = auth.currentUser;
+    if (!current) {
+      throw new Error('Faça login para salvar seu progresso na nuvem.');
+    }
+    return current;
+  };
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (!firebaseUser) {
+        setWorkspaceAccessToken(null);
+        let guestActive = false;
+        try {
+          guestActive = localStorage.getItem(GUEST_MODE_KEY) === 'true';
+        } catch {
+          guestActive = false;
+        }
+        setIsGuest(guestActive);
+        if (guestActive) {
+          hydrateGuestData();
+        } else {
+          setProfile(null);
+          setTopicProgressMap({});
+          setDisciplineGoalsMap({});
+          setReadingProgressMap({});
+          setStudySessions([]);
+          setSimuladoAttempts([]);
+          setErrorNotebook([]);
+          setMyMaterials([]);
+          setMyQuestions([]);
+          setMyFamilyMembership(null);
+          setFamilyMembers([]);
+          setAccessSessions([]);
+        }
+        setAuthLoading(false);
+        return;
+      }
+
+      setIsGuest(false);
+      try {
+        localStorage.removeItem(GUEST_MODE_KEY);
+      } catch {
+        // ignore storage errors
+      }
+
+      const fallbackProfile: UserProfile = {
+        uid: firebaseUser.uid,
+        displayName: (firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Estudante ALEPA').slice(0, 120),
+        role: 'student',
+        dailyGoalMinutes: CONCURSO_PROFILE.dailyGoalMinutes,
+        examDate: CONCURSO_PROFILE.examDate,
+        targetCargo: 'Cargo 03 – Técnico Legislativo (PL.AL.102)',
+      };
+      setProfile((prev) => prev || fallbackProfile);
+
+      try {
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const snap = await getDoc(userRef);
+        const isPrimaryAdminAccount =
+          Boolean(firebaseUser.emailVerified) && isAdminEmail(firebaseUser.email);
+        const cleanEmail = (firebaseUser.email || '').trim().toLowerCase().slice(0, 160);
+        if (!snap.exists()) {
+          const newProfile: Record<string, unknown> = {
+            uid: firebaseUser.uid,
+            displayName: fallbackProfile.displayName,
+            role: isPrimaryAdminAccount ? 'admin' : 'student',
+            dailyGoalMinutes: CONCURSO_PROFILE.dailyGoalMinutes,
+            examDate: CONCURSO_PROFILE.examDate,
+            targetCargo: 'Cargo 03 – Técnico Legislativo (PL.AL.102)',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+          if (cleanEmail) newProfile.email = cleanEmail;
+          await setDoc(userRef, newProfile);
+        } else {
+          const existingData = snap.data() as Partial<UserProfile>;
+          const updates: Record<string, unknown> = {};
+          if (isPrimaryAdminAccount && existingData.role !== 'admin' && existingData.role !== 'dev') {
+            updates.role = 'admin';
+          }
+          if (cleanEmail && !existingData.email) {
+            updates.email = cleanEmail;
+          }
+          if (Object.keys(updates).length > 0) {
+            updates.updatedAt = serverTimestamp();
+            await updateDoc(userRef, updates);
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao inicializar perfil:', err);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const uid = user.uid;
+    const unsubs: Array<() => void> = [];
+
+    unsubs.push(
+      onSnapshot(
+        doc(db, 'users', uid),
+        (snap) => {
+          if (snap.exists()) {
+            setProfile(snap.data() as UserProfile);
+          }
+        },
+        (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}`)
+      )
+    );
+
+    unsubs.push(
+      onSnapshot(
+        collection(db, 'users', uid, 'topicProgress'),
+        (snap) => {
+          const next: Record<string, TopicProgress> = {};
+          snap.forEach((docSnap) => {
+            const data = docSnap.data() as TopicProgress;
+            next[docSnap.id] = data;
+          });
+          setTopicProgressMap(next);
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, `users/${uid}/topicProgress`)
+      )
+    );
+
+    unsubs.push(
+      onSnapshot(
+        collection(db, 'users', uid, 'disciplineGoals'),
+        (snap) => {
+          const next: Record<string, DisciplineWeeklyGoal> = {};
+          snap.forEach((docSnap) => {
+            next[docSnap.id] = docSnap.data() as DisciplineWeeklyGoal;
+          });
+          setDisciplineGoalsMap(next);
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, `users/${uid}/disciplineGoals`)
+      )
+    );
+
+    unsubs.push(
+      onSnapshot(
+        collection(db, 'users', uid, 'readingProgress'),
+        (snap) => {
+          const next: Record<string, ReadingProgress> = {};
+          snap.forEach((docSnap) => {
+            next[docSnap.id] = docSnap.data() as ReadingProgress;
+          });
+          setReadingProgressMap(next);
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, `users/${uid}/readingProgress`)
+      )
+    );
+
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'users', uid, 'studySessions'), orderBy('createdAt', 'desc')),
+        (snap) => {
+          const list: StudySession[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StudySession, 'id'>) }));
+          setStudySessions(list);
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, `users/${uid}/studySessions`)
+      )
+    );
+
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'users', uid, 'simuladoAttempts'), orderBy('createdAt', 'desc')),
+        (snap) => {
+          const list: SimuladoAttempt[] = snap.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<SimuladoAttempt, 'id'>),
+          }));
+          setSimuladoAttempts(list);
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, `users/${uid}/simuladoAttempts`)
+      )
+    );
+
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'users', uid, 'errorNotebook'), orderBy('updatedAt', 'desc')),
+        (snap) => {
+          const list: ErrorEntry[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ErrorEntry, 'id'>) }));
+          setErrorNotebook(list);
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, `users/${uid}/errorNotebook`)
+      )
+    );
+
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'materials'), where('ownerId', '==', uid)),
+        (snap) => {
+          setMyMaterials(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StudyMaterial, 'id'>) })));
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'materials')
+      )
+    );
+
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'sharedQuestions'), where('authorId', '==', uid)),
+        (snap) => {
+          setMyQuestions(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Question, 'id'>) })));
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'sharedQuestions')
+      )
+    );
+
+    if (user.emailVerified && user.email) {
+      const famId = toFamilyMemberDocId(user.email);
+      unsubs.push(
+        onSnapshot(
+          doc(db, 'familyMembers', famId),
+          (snap) => {
+            if (snap.exists()) {
+              setMyFamilyMembership({ id: snap.id, ...(snap.data() as Omit<FamilyMember, 'id'>) });
+            } else {
+              setMyFamilyMembership(null);
+            }
+          },
+          () => {
+            setMyFamilyMembership(null);
+          }
+        )
+      );
+    } else {
+      setMyFamilyMembership(null);
+    }
+
+    if (canAccessAdminPanel) {
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'materials'), limit(300)),
+          (snap) => {
+            setAdminMaterials(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StudyMaterial, 'id'>) })));
+          },
+          (err) => console.warn('Erro ao sincronizar materiais administrativos:', err)
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'sharedQuestions'), limit(300)),
+          (snap) => {
+            setAdminQuestions(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Question, 'id'>) })));
+          },
+          (err) => console.warn('Erro ao sincronizar questões administrativas:', err)
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'managedDisciplines'), limit(150)),
+          (snap) => {
+            setAdminDisciplines(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ManagedDiscipline, 'id'>) })));
+          },
+          (err) => console.warn('Erro ao sincronizar disciplinas administrativas:', err)
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'managedTopics'), limit(300)),
+          (snap) => {
+            setAdminTopics(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ManagedTopic, 'id'>) })));
+          },
+          (err) => console.warn('Erro ao sincronizar tópicos administrativos:', err)
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'simuladoLists'), limit(150)),
+          (snap) => {
+            setAdminSimuladoLists(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<SimuladoList, 'id'>) })));
+          },
+          (err) => console.warn('Erro ao sincronizar listas de simulados:', err)
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'platformNotices'), limit(150)),
+          (snap) => {
+            setAdminNotices(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<PlatformNotice, 'id'>) })));
+          },
+          (err) => console.warn('Erro ao sincronizar avisos administrativos:', err)
+        )
+      );
+    } else {
+      setAdminMaterials([]);
+      setAdminQuestions([]);
+      setAdminDisciplines([]);
+      setAdminTopics([]);
+      setAdminSimuladoLists([]);
+      setAdminNotices([]);
+    }
+
+    if (canManageUsers) {
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'users'), limit(200)),
+          (snap) => {
+            setAllUsers(snap.docs.map((d) => d.data() as UserProfile));
+          },
+          (err) => console.warn('Erro ao listar usuários:', err)
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          collection(db, 'familyMembers'),
+          (snap) => {
+            setFamilyMembers(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<FamilyMember, 'id'>) })));
+          },
+          (err) => handleFirestoreError(err, OperationType.LIST, 'familyMembers')
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'accessSessions'), limit(200)),
+          (snap) => {
+            setAccessSessions(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AccessSession, 'id'>) })));
+          },
+          (err) => handleFirestoreError(err, OperationType.LIST, 'accessSessions')
+        )
+      );
+    } else {
+      setAllUsers([]);
+      setFamilyMembers([]);
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'accessSessions'), where('userId', '==', uid)),
+          (snap) => {
+            setAccessSessions(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AccessSession, 'id'>) })));
+          },
+          (err) => handleFirestoreError(err, OperationType.LIST, 'accessSessions')
+        )
+      );
+    }
+
+    return () => {
+      unsubs.forEach((u) => u());
+    };
+  }, [user, canAccessAdminPanel, canManageUsers]);
+
+  useEffect(() => {
+    const unsubSharedMaterials = onSnapshot(
+      query(collection(db, 'materials'), where('isShared', '==', true), limit(250)),
+      (snap) => {
+        setSharedMaterials(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StudyMaterial, 'id'>) })));
+      },
+      (err) => {
+        console.warn('Falha ao sincronizar materiais compartilhados:', err);
+      }
+    );
+
+    const unsubPublishedQuestions = onSnapshot(
+      query(collection(db, 'sharedQuestions'), where('isPublished', '==', true), limit(250)),
+      (snap) => {
+        setPublishedQuestions(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Question, 'id'>) })));
+      },
+      (err) => {
+        console.warn('Falha ao sincronizar questões publicadas:', err);
+      }
+    );
+
+    const unsubDisciplines = onSnapshot(
+      query(collection(db, 'managedDisciplines'), where('status', '==', 'published'), limit(100)),
+      (snap) => {
+        setPublishedDisciplines(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ManagedDiscipline, 'id'>) })));
+      },
+      () => {}
+    );
+
+    const unsubTopics = onSnapshot(
+      query(collection(db, 'managedTopics'), where('status', '==', 'published'), limit(250)),
+      (snap) => {
+        setPublishedTopics(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ManagedTopic, 'id'>) })));
+      },
+      () => {}
+    );
+
+    const unsubSimuladoLists = onSnapshot(
+      query(collection(db, 'simuladoLists'), where('status', '==', 'published'), limit(100)),
+      (snap) => {
+        setPublishedSimuladoLists(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<SimuladoList, 'id'>) })));
+      },
+      () => {}
+    );
+
+    const unsubNotices = onSnapshot(
+      query(collection(db, 'platformNotices'), where('status', '==', 'published'), limit(100)),
+      (snap) => {
+        setPublishedNotices(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<PlatformNotice, 'id'>) })));
+      },
+      () => {}
+    );
+
+    return () => {
+      unsubSharedMaterials();
+      unsubPublishedQuestions();
+      unsubDisciplines();
+      unsubTopics();
+      unsubSimuladoLists();
+      unsubNotices();
+    };
+  }, []);
+
+  const syncAccessPresence = useCallback(
+    async (online: boolean) => {
+      const current = auth.currentUser;
+      if (!current) return;
+      const devId = deviceIdRef.current;
+      const sessionId = sanitizeId(`${current.uid}_${devId}`);
+      const ref = doc(db, 'accessSessions', sessionId);
+      const staffMember = canAccessAdminPanel || Boolean(current.emailVerified && isAdminEmail(current.email));
+      const accessType: AccessSession['accessType'] = staffMember
+        ? 'admin'
+        : myFamilyMembership?.active
+          ? 'familiar'
+          : 'estudante';
+      const displayName = (
+        profile?.displayName ||
+        current.displayName ||
+        current.email?.split('@')[0] ||
+        'Visitante'
+      ).slice(0, 120);
+      const deviceType = detectDeviceType();
+      const currentTab = (presenceContextRef.current.tab || 'dashboard').slice(0, 40);
+      const activeCampus: CampusLevel = presenceContextRef.current.campus === 'medio' ? 'medio' : 'superior';
+
+      try {
+        const snap = await getDoc(ref);
+        if (!snap.exists()) {
+          await setDoc(ref, {
+            userId: current.uid,
+            deviceId: devId,
+            displayName,
+            accessType,
+            deviceType,
+            currentTab,
+            activeCampus,
+            isOnline: online,
+            sessionStartedAt: serverTimestamp(),
+            lastSeenAt: serverTimestamp(),
+          });
+        } else {
+          await updateDoc(ref, {
+            displayName,
+            accessType,
+            deviceType,
+            currentTab,
+            activeCampus,
+            isOnline: online,
+            lastSeenAt: serverTimestamp(),
+          });
+        }
+      } catch {
+        // Non-blocking heartbeat error
+      }
+    },
+    [profile?.displayName, myFamilyMembership?.active, canAccessAdminPanel]
+  );
+
+  const updateAccessPresenceContext = useCallback(
+    (tab: string, campus: CampusLevel) => {
+      const prev = presenceContextRef.current;
+      if (prev.tab === tab && prev.campus === campus) return;
+      presenceContextRef.current = { tab, campus };
+      if (auth.currentUser) {
+        void syncAccessPresence(true);
+      }
+    },
+    [syncAccessPresence]
+  );
+
+  useEffect(() => {
+    if (!user) return;
+    void syncAccessPresence(true);
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void syncAccessPresence(true);
+      }
+    }, 45000);
+
+    const onVisibility = () => {
+      void syncAccessPresence(document.visibilityState === 'visible');
+    };
+    const onPageHide = () => {
+      void syncAccessPresence(false);
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, [user, syncAccessPresence]);
+
+  const materials = React.useMemo(() => {
+    const merged = new Map<string, StudyMaterial>();
+    GERAL_DEFAULT_MATERIALS.forEach((m) => merged.set(m.id, m));
+    DEFAULT_STUDY_MATERIALS.forEach((m) => merged.set(m.id, m));
+    MEDIO_DEFAULT_MATERIALS.forEach((m) => merged.set(m.id, m));
+    sharedMaterials.forEach((m) => {
+      if (!m.status || m.status === 'published') {
+        merged.set(m.id, m);
+      }
+    });
+    myMaterials.forEach((m) => {
+      if (m.status === 'archived') return;
+      if (m.status === 'draft' && m.isShared) return;
+      merged.set(m.id, m);
+    });
+    return Array.from(merged.values());
+  }, [sharedMaterials, myMaterials]);
+
+  const allManagedMaterials = React.useMemo(() => {
+    const merged = new Map<string, StudyMaterial>();
+    GERAL_DEFAULT_MATERIALS.forEach((m) => merged.set(m.id, { ...m, status: 'published' }));
+    DEFAULT_STUDY_MATERIALS.forEach((m) => merged.set(m.id, { ...m, status: 'published' }));
+    MEDIO_DEFAULT_MATERIALS.forEach((m) => merged.set(m.id, { ...m, status: 'published' }));
+    adminMaterials.forEach((m) => merged.set(m.id, m));
+    myMaterials.forEach((m) => {
+      if (!merged.has(m.id)) merged.set(m.id, m);
+    });
+    return Array.from(merged.values());
+  }, [adminMaterials, myMaterials]);
+
+  const questions = React.useMemo(() => {
+    const merged = new Map<string, Question>();
+    CETAP_QUESTIONS.forEach((q) => merged.set(q.id, q));
+    MEDIO_QUESTIONS.forEach((q) => merged.set(q.id, q));
+    EXTRA_CURATED_QUESTIONS.forEach((q) => merged.set(q.id, q));
+    publishedQuestions.forEach((q) => {
+      if (!q.status || q.status === 'published') {
+        merged.set(q.id, q);
+      }
+    });
+    myQuestions.forEach((q) => {
+      if (q.status === 'archived') return;
+      if (q.status === 'draft' && q.isPublished) return;
+      merged.set(q.id, q);
+    });
+    return Array.from(merged.values());
+  }, [publishedQuestions, myQuestions]);
+
+  const allManagedQuestions = React.useMemo(() => {
+    const merged = new Map<string, Question>();
+    adminQuestions.forEach((q) => merged.set(q.id, q));
+    myQuestions.forEach((q) => {
+      if (!merged.has(q.id)) merged.set(q.id, q);
+    });
+    return Array.from(merged.values());
+  }, [adminQuestions, myQuestions]);
+
+  const managedDisciplines = React.useMemo(
+    () => publishedDisciplines.filter((d) => d.status === 'published'),
+    [publishedDisciplines]
+  );
+
+  const allManagedDisciplines = React.useMemo(
+    () => [...adminDisciplines].sort((a, b) => a.priorityRank - b.priorityRank),
+    [adminDisciplines]
+  );
+
+  const managedTopics = React.useMemo(
+    () => publishedTopics.filter((t) => t.status === 'published').sort((a, b) => a.order - b.order),
+    [publishedTopics]
+  );
+
+  const allManagedTopics = React.useMemo(
+    () => [...adminTopics].sort((a, b) => a.order - b.order),
+    [adminTopics]
+  );
+
+  const simuladoLists = React.useMemo(
+    () => publishedSimuladoLists.filter((s) => s.status === 'published'),
+    [publishedSimuladoLists]
+  );
+
+  const allManagedSimuladoLists = React.useMemo(() => adminSimuladoLists, [adminSimuladoLists]);
+
+  const platformNotices = React.useMemo(
+    () => publishedNotices.filter((n) => n.status === 'published'),
+    [publishedNotices]
+  );
+
+  const allManagedNotices = React.useMemo(() => adminNotices, [adminNotices]);
+
+  const getCampusDisciplines = useCallback(
+    (campus: CampusLevel, medioCargoGroup: MedioCargoGroup = 'cargo_01_04'): Discipline[] => {
+      const base = campus === 'medio' ? getMedioDisciplines(medioCargoGroup) : ALEPA_DISCIPLINES;
+      const customForCampus = managedDisciplines.filter((d) => d.campusLevel === campus);
+      const customTopicsForCampus = managedTopics.filter((t) => t.campusLevel === campus);
+
+      const disciplineMap = new Map<string, Discipline>();
+      base.forEach((d) => {
+        const extraTopics = customTopicsForCampus
+          .filter((t) => t.disciplineId === d.id)
+          .map((t) => ({
+            id: t.topicId || t.id,
+            disciplineId: t.disciplineId,
+            title: t.title,
+            subtopics: t.subtopics,
+            highYield: t.highYield,
+          }));
+
+        const topicMap = new Map(d.topics.map((t) => [t.id, t]));
+        extraTopics.forEach((et) => topicMap.set(et.id, et));
+
+        disciplineMap.set(d.id, {
+          ...d,
+          topics: Array.from(topicMap.values()),
+        });
+      });
+
+      customForCampus.forEach((cd) => {
+        const existing = disciplineMap.get(cd.id);
+        const matchingTopics = customTopicsForCampus
+          .filter((t) => t.disciplineId === cd.id)
+          .map((t) => ({
+            id: t.topicId || t.id,
+            disciplineId: t.disciplineId,
+            title: t.title,
+            subtopics: t.subtopics,
+            highYield: t.highYield,
+          }));
+        if (existing) {
+          const topicMap = new Map(existing.topics.map((t) => [t.id, t]));
+          matchingTopics.forEach((mt) => topicMap.set(mt.id, mt));
+          disciplineMap.set(cd.id, {
+            ...existing,
+            name: cd.name,
+            shortName: cd.shortName,
+            editalBlock: cd.editalBlock,
+            priorityRank: cd.priorityRank,
+            examQuestions: cd.examQuestions,
+            examPoints: cd.examPoints,
+            tieBreakerOrder: cd.tieBreakerOrder,
+            recommendedMinutesPerCycle: cd.recommendedMinutesPerCycle,
+            topics: Array.from(topicMap.values()),
+          });
+        } else {
+          disciplineMap.set(cd.id, {
+            id: cd.id,
+            name: cd.name,
+            shortName: cd.shortName,
+            editalBlock: cd.editalBlock,
+            priorityRank: cd.priorityRank,
+            examQuestions: cd.examQuestions,
+            examPoints: cd.examPoints,
+            tieBreakerOrder: cd.tieBreakerOrder,
+            recommendedMinutesPerCycle: cd.recommendedMinutesPerCycle,
+            topics: matchingTopics,
+          });
+        }
+      });
+
+      return Array.from(disciplineMap.values()).sort((a, b) => a.priorityRank - b.priorityRank);
+    },
+    [managedDisciplines, managedTopics]
+  );
+
+  const loginWithEmail = async (email: string, password: string) => {
+    setIsGuest(false);
+    try {
+      localStorage.removeItem(GUEST_MODE_KEY);
+    } catch {
+      // ignore
+    }
+    await signInWithEmailAndPassword(auth, email.trim(), password);
+  };
+
+  const registerWithEmail = async (
+    email: string,
+    password: string,
+    displayName: string,
+    _preferredRole: UserRole
+  ) => {
+    setIsGuest(false);
+    try {
+      localStorage.removeItem(GUEST_MODE_KEY);
+    } catch {
+      // ignore
+    }
+    const cleanName = displayName.trim().slice(0, 120);
+    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    await updateProfile(cred.user, { displayName: cleanName });
+    try {
+      const userRef = doc(db, 'users', cred.user.uid);
+      const snap = await getDoc(userRef);
+      if (!snap.exists()) {
+        await setDoc(userRef, {
+          uid: cred.user.uid,
+          displayName: cleanName || cred.user.email?.split('@')[0] || 'Estudante ALEPA',
+          role: 'student',
+          dailyGoalMinutes: CONCURSO_PROFILE.dailyGoalMinutes,
+          examDate: CONCURSO_PROFILE.examDate,
+          targetCargo: 'Cargo 03 – Técnico Legislativo (PL.AL.102)',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao criar perfil inicial:', err);
+    }
+    // Optional non-blocking verification email
+    void sendEmailVerification(cred.user).catch(() => {});
+  };
+
+  const loginWithGoogle = async () => {
+    setIsGuest(false);
+    try {
+      localStorage.removeItem(GUEST_MODE_KEY);
+    } catch {
+      // ignore
+    }
+    const result = await signInWithPopup(auth, googleAuthProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.accessToken) {
+      setWorkspaceAccessToken(credential.accessToken);
+    }
+  };
+
+  const enterGuestMode = () => {
+    try {
+      localStorage.setItem(GUEST_MODE_KEY, 'true');
+    } catch {
+      // ignore
+    }
+    setIsGuest(true);
+    setSyncError(null);
+    hydrateGuestData();
+  };
+
+  const exitGuestMode = () => {
+    try {
+      localStorage.removeItem(GUEST_MODE_KEY);
+    } catch {
+      // ignore
+    }
+    setIsGuest(false);
+  };
+
+  const connectGoogleWorkspace = async (): Promise<string | null> => {
+    const current = auth.currentUser;
+    const hasGoogleLinked = current?.providerData.some((p) => p.providerId === 'google.com');
+
+    workspaceAuthProvider.setCustomParameters({ prompt: 'consent select_account' });
+    try {
+      let result;
+      if (current && hasGoogleLinked) {
+        result = await reauthenticateWithPopup(current, workspaceAuthProvider);
+      } else if (current) {
+        try {
+          result = await linkWithPopup(current, workspaceAuthProvider);
+        } catch (linkErr: unknown) {
+          const code = (linkErr as { code?: string })?.code || '';
+          if (code === 'auth/credential-already-in-use' || code === 'auth/provider-already-linked') {
+            result = await signInWithPopup(auth, workspaceAuthProvider);
+          } else {
+            throw linkErr;
+          }
+        }
+      } else {
+        result = await signInWithPopup(auth, workspaceAuthProvider);
+      }
+
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token = credential?.accessToken || null;
+      if (!token) {
+        throw new Error('Não foi possível obter a autorização da sua conta Google Workspace.');
+      }
+      setWorkspaceAccessToken(token);
+      return token;
+    } finally {
+      workspaceAuthProvider.setCustomParameters({});
+    }
+  };
+
+  const clearWorkspaceToken = () => {
+    setWorkspaceAccessToken(null);
+  };
+
+  const resendVerification = async () => {
+    if (auth.currentUser) {
+      await sendEmailVerification(auth.currentUser);
+    }
+  };
+
+  const refreshAuthState = async () => {
+    if (auth.currentUser) {
+      await auth.currentUser.reload();
+      setUser(auth.currentUser);
+      setAuthRefreshTick((t) => t + 1);
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      const snap = await getDoc(userRef);
+      const isPrimaryAdminAccount =
+        Boolean(auth.currentUser.emailVerified) && isAdminEmail(auth.currentUser.email);
+      const cleanEmail = (auth.currentUser.email || '').trim().toLowerCase().slice(0, 160);
+      if (!snap.exists()) {
+        const payload: Record<string, unknown> = {
+          uid: auth.currentUser.uid,
+          displayName: (
+            auth.currentUser.displayName ||
+            auth.currentUser.email?.split('@')[0] ||
+            'Estudante ALEPA'
+          ).slice(0, 120),
+          role: isPrimaryAdminAccount ? 'admin' : 'student',
+          dailyGoalMinutes: CONCURSO_PROFILE.dailyGoalMinutes,
+          examDate: CONCURSO_PROFILE.examDate,
+          targetCargo: 'Cargo 03 – Técnico Legislativo (PL.AL.102)',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        if (cleanEmail) payload.email = cleanEmail;
+        await setDoc(userRef, payload);
+      } else {
+        const existingData = snap.data() as Partial<UserProfile>;
+        const updates: Record<string, unknown> = {};
+        if (isPrimaryAdminAccount && existingData.role !== 'admin' && existingData.role !== 'dev') {
+          updates.role = 'admin';
+        }
+        if (cleanEmail && !existingData.email) {
+          updates.email = cleanEmail;
+        }
+        if (Object.keys(updates).length > 0) {
+          updates.updatedAt = serverTimestamp();
+          await updateDoc(userRef, updates);
+        }
+      }
+    }
+  };
+
+  const logout = async () => {
+    setWorkspaceAccessToken(null);
+    if (isGuest && !auth.currentUser) {
+      exitGuestMode();
+      return;
+    }
+    if (auth.currentUser) {
+      await syncAccessPresence(false);
+    }
+    await signOut(auth);
+  };
+
+  const updateProfileSettings = async (patch: {
+    displayName?: string;
+    dailyGoalMinutes?: number;
+    examDate?: string;
+    targetCargo?: string;
+  }) => {
+    if (isGuest && !auth.currentUser) {
+      persistGuestPatch((prev) => ({
+        ...prev,
+        profile: {
+          ...prev.profile,
+          displayName:
+            patch.displayName !== undefined ? patch.displayName.trim().slice(0, 120) : prev.profile.displayName,
+          dailyGoalMinutes:
+            patch.dailyGoalMinutes !== undefined
+              ? Math.max(15, Math.min(720, Math.round(patch.dailyGoalMinutes)))
+              : prev.profile.dailyGoalMinutes,
+          examDate:
+            patch.examDate !== undefined && patch.examDate.trim().length >= 8
+              ? patch.examDate.trim().slice(0, 20)
+              : prev.profile.examDate,
+          targetCargo:
+            patch.targetCargo !== undefined && patch.targetCargo.trim().length >= 1
+              ? patch.targetCargo.trim().slice(0, 120)
+              : prev.profile.targetCargo,
+        },
+      }));
+      return;
+    }
+    const current = ensureSignedIn();
+    const path = `users/${current.uid}`;
+    try {
+      const ref = doc(db, 'users', current.uid);
+      const updates: Record<string, unknown> = { updatedAt: serverTimestamp() };
+      if (patch.displayName !== undefined) updates.displayName = patch.displayName.trim().slice(0, 120);
+      if (patch.dailyGoalMinutes !== undefined) {
+        updates.dailyGoalMinutes = Math.max(15, Math.min(720, Math.round(patch.dailyGoalMinutes)));
+      }
+      if (patch.examDate !== undefined && patch.examDate.trim().length >= 8) {
+        updates.examDate = patch.examDate.trim().slice(0, 20);
+      }
+      if (patch.targetCargo !== undefined && patch.targetCargo.trim().length >= 1) {
+        updates.targetCargo = patch.targetCargo.trim().slice(0, 120);
+      }
+      await updateDoc(ref, updates);
+    } catch (err) {
+      setSyncError('Não foi possível atualizar seu perfil agora.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const saveDisciplineWeeklyGoal = async (disciplineId: string, weeklyGoalMinutes: number) => {
+    const safeDiscId = sanitizeId(disciplineId).slice(0, 80);
+    const clampedMinutes = Math.max(15, Math.min(2520, Math.round(weeklyGoalMinutes)));
+
+    if (isGuest && !auth.currentUser) {
+      persistGuestPatch((prev) => ({
+        ...prev,
+        disciplineGoalsMap: {
+          ...prev.disciplineGoalsMap,
+          [safeDiscId]: {
+            userId: GUEST_UID,
+            disciplineId: safeDiscId,
+            weeklyGoalMinutes: clampedMinutes,
+          },
+        },
+      }));
+      return;
+    }
+
+    const current = ensureSignedIn();
+    const existing = disciplineGoalsMap[safeDiscId];
+    const path = `users/${current.uid}/disciplineGoals/${safeDiscId}`;
+    try {
+      const ref = doc(db, 'users', current.uid, 'disciplineGoals', safeDiscId);
+      if (existing) {
+        await updateDoc(ref, {
+          weeklyGoalMinutes: clampedMinutes,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(ref, {
+          userId: current.uid,
+          disciplineId: safeDiscId,
+          weeklyGoalMinutes: clampedMinutes,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (err) {
+      setSyncError('Erro ao salvar meta semanal da disciplina.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+    }
+  };
+
+  const saveTopicProgress = async (
+    topicId: string,
+    disciplineId: string,
+    patch: Partial<Pick<TopicProgress, 'theoryDone' | 'questionsDone' | 'revisionDone' | 'notes'>>
+  ) => {
+    const safeTopicId = sanitizeId(topicId);
+    const existing = topicProgressMap[safeTopicId];
+    const theoryDone = patch.theoryDone ?? existing?.theoryDone ?? false;
+    const questionsDone = patch.questionsDone ?? existing?.questionsDone ?? false;
+    const revisionDone = patch.revisionDone ?? existing?.revisionDone ?? false;
+    const notes = (patch.notes ?? existing?.notes ?? '').slice(0, 2000);
+    const masteryLevel = Math.round(
+      ((theoryDone ? 40 : 0) + (questionsDone ? 40 : 0) + (revisionDone ? 20 : 0))
+    );
+
+    if (isGuest && !auth.currentUser) {
+      persistGuestPatch((prev) => ({
+        ...prev,
+        topicProgressMap: {
+          ...prev.topicProgressMap,
+          [safeTopicId]: {
+            userId: GUEST_UID,
+            topicId: safeTopicId,
+            disciplineId: disciplineId.slice(0, 80),
+            theoryDone,
+            questionsDone,
+            revisionDone,
+            masteryLevel,
+            notes,
+          },
+        },
+      }));
+      return;
+    }
+
+    const current = ensureSignedIn();
+    const path = `users/${current.uid}/topicProgress/${safeTopicId}`;
+    try {
+      const ref = doc(db, 'users', current.uid, 'topicProgress', safeTopicId);
+      if (existing) {
+        await updateDoc(ref, {
+          theoryDone,
+          questionsDone,
+          revisionDone,
+          masteryLevel,
+          notes,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(ref, {
+          userId: current.uid,
+          topicId: safeTopicId,
+          disciplineId: disciplineId.slice(0, 80),
+          theoryDone,
+          questionsDone,
+          revisionDone,
+          masteryLevel,
+          notes,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (err) {
+      setSyncError('Erro ao salvar progresso do tópico.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+    }
+  };
+
+  const saveReadingProgress = async (
+    materialId: string,
+    patch: Partial<Omit<ReadingProgress, 'materialId' | 'userId' | 'updatedAt'>>
+  ) => {
+    const safeMaterialId = sanitizeId(materialId);
+    const existing = readingProgressMap[safeMaterialId];
+
+    const totalPages = Math.max(1, Math.min(20000, Math.round(patch.totalPages ?? existing?.totalPages ?? 1)));
+    const lastPage = Math.max(1, Math.min(totalPages, Math.round(patch.lastPage ?? existing?.lastPage ?? 1)));
+    const progressPercent = Math.max(
+      0,
+      Math.min(100, Math.round(patch.progressPercent ?? Math.round((lastPage / totalPages) * 100)))
+    );
+    const readingMode = patch.readingMode ?? existing?.readingMode ?? 'book';
+    const fontSize = Math.max(12, Math.min(32, Math.round(patch.fontSize ?? existing?.fontSize ?? 17)));
+    const lineHeight = Math.max(1.1, Math.min(2.6, Number((patch.lineHeight ?? existing?.lineHeight ?? 1.65).toFixed(2))));
+    const maxWidthCh = Math.max(40, Math.min(110, Math.round(patch.maxWidthCh ?? existing?.maxWidthCh ?? 68)));
+    const theme = patch.theme ?? existing?.theme ?? 'paper';
+    const materialTitle = (patch.materialTitle ?? existing?.materialTitle ?? 'Documento PDF').trim().slice(0, 200) || 'Documento PDF';
+    const bookmarks = (patch.bookmarks ?? existing?.bookmarks ?? []).slice(0, 100);
+    const highlights = (patch.highlights ?? existing?.highlights ?? []).slice(0, 150);
+    const annotations = (patch.annotations ?? existing?.annotations ?? []).slice(0, 150);
+    const lastReadAt = (patch.lastReadAt ?? new Date().toISOString()).slice(0, 40);
+
+    if (isGuest && !auth.currentUser) {
+      persistGuestPatch((prev) => ({
+        ...prev,
+        readingProgressMap: {
+          ...prev.readingProgressMap,
+          [safeMaterialId]: {
+            userId: GUEST_UID,
+            materialId: safeMaterialId,
+            materialTitle,
+            lastPage,
+            totalPages,
+            progressPercent,
+            readingMode,
+            fontSize,
+            lineHeight,
+            maxWidthCh,
+            theme,
+            bookmarks,
+            highlights,
+            annotations,
+            lastReadAt,
+          },
+        },
+      }));
+      return;
+    }
+
+    const current = ensureSignedIn();
+    const path = `users/${current.uid}/readingProgress/${safeMaterialId}`;
+    try {
+      const ref = doc(db, 'users', current.uid, 'readingProgress', safeMaterialId);
+      const docPayload = {
+        materialTitle,
+        lastPage,
+        totalPages,
+        progressPercent,
+        readingMode,
+        fontSize,
+        lineHeight,
+        maxWidthCh,
+        theme,
+        bookmarks,
+        highlights,
+        annotations,
+        lastReadAt,
+        updatedAt: serverTimestamp(),
+      };
+      if (existing) {
+        await updateDoc(ref, docPayload);
+      } else {
+        await setDoc(ref, {
+          userId: current.uid,
+          materialId: safeMaterialId,
+          ...docPayload,
+        });
+      }
+    } catch (err) {
+      setSyncError('Erro ao sincronizar histórico de leitura.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+    }
+  };
+
+  const deleteReadingProgress = async (materialId: string) => {
+    const safeMaterialId = sanitizeId(materialId);
+    if (isGuest && !auth.currentUser) {
+      persistGuestPatch((prev) => {
+        const nextMap = { ...prev.readingProgressMap };
+        delete nextMap[safeMaterialId];
+        return { ...prev, readingProgressMap: nextMap };
+      });
+      return;
+    }
+
+    const current = ensureSignedIn();
+    const path = `users/${current.uid}/readingProgress/${safeMaterialId}`;
+    try {
+      await deleteDoc(doc(db, 'users', current.uid, 'readingProgress', safeMaterialId));
+    } catch (err) {
+      setSyncError('Erro ao remover registro de leitura.');
+      handleFirestoreError(err, OperationType.DELETE, path);
+    }
+  };
+
+  const logStudySession = async (input: {
+    dateKey: string;
+    disciplineId: string;
+    topicTitle: string;
+    blockType: BlockType;
+    durationMinutes: number;
+    notes?: string;
+  }) => {
+    const sessionId = sanitizeId(`ses_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+    if (isGuest && !auth.currentUser) {
+      const newSession: StudySession = {
+        id: sessionId,
+        userId: GUEST_UID,
+        dateKey: input.dateKey.slice(0, 20),
+        disciplineId: input.disciplineId.slice(0, 80),
+        topicTitle: input.topicTitle.trim().slice(0, 200) || 'Sessão de estudo',
+        blockType: input.blockType,
+        durationMinutes: Math.max(1, Math.min(600, Math.round(input.durationMinutes))),
+        notes: (input.notes || '').slice(0, 1000),
+      };
+      persistGuestPatch((prev) => ({
+        ...prev,
+        studySessions: [newSession, ...prev.studySessions],
+      }));
+      return;
+    }
+
+    const current = ensureSignedIn();
+    const path = `users/${current.uid}/studySessions/${sessionId}`;
+    try {
+      await setDoc(doc(db, 'users', current.uid, 'studySessions', sessionId), {
+        userId: current.uid,
+        dateKey: input.dateKey.slice(0, 20),
+        disciplineId: input.disciplineId.slice(0, 80),
+        topicTitle: input.topicTitle.trim().slice(0, 200) || 'Sessão de estudo',
+        blockType: input.blockType,
+        durationMinutes: Math.max(1, Math.min(600, Math.round(input.durationMinutes))),
+        notes: (input.notes || '').slice(0, 1000),
+        createdAt: serverTimestamp(),
+      });
+    } catch (err) {
+      setSyncError('Erro ao registrar sessão de estudo.');
+      handleFirestoreError(err, OperationType.CREATE, path);
+    }
+  };
+
+  const saveSimuladoAttempt = async (input: {
+    title: string;
+    mode: 'treino' | 'simulado';
+    primaryDisciplineId: string;
+    totalQuestions: number;
+    correctCount: number;
+    score: number;
+    durationSeconds: number;
+  }) => {
+    const attemptId = sanitizeId(`sim_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+    if (isGuest && !auth.currentUser) {
+      const attempt: SimuladoAttempt = {
+        id: attemptId,
+        userId: GUEST_UID,
+        title: input.title.trim().slice(0, 160),
+        mode: input.mode,
+        primaryDisciplineId: input.primaryDisciplineId.slice(0, 80),
+        totalQuestions: Math.max(1, Math.min(200, Math.round(input.totalQuestions))),
+        correctCount: Math.max(0, Math.min(input.totalQuestions, Math.round(input.correctCount))),
+        score: Math.max(0, Math.min(10, Number(input.score.toFixed(2)))),
+        durationSeconds: Math.max(0, Math.min(36000, Math.round(input.durationSeconds))),
+      };
+      persistGuestPatch((prev) => ({
+        ...prev,
+        simuladoAttempts: [attempt, ...prev.simuladoAttempts],
+      }));
+      return;
+    }
+
+    const current = ensureSignedIn();
+    const path = `users/${current.uid}/simuladoAttempts/${attemptId}`;
+    try {
+      await setDoc(doc(db, 'users', current.uid, 'simuladoAttempts', attemptId), {
+        userId: current.uid,
+        title: input.title.trim().slice(0, 160),
+        mode: input.mode,
+        primaryDisciplineId: input.primaryDisciplineId.slice(0, 80),
+        totalQuestions: Math.max(1, Math.min(200, Math.round(input.totalQuestions))),
+        correctCount: Math.max(0, Math.min(input.totalQuestions, Math.round(input.correctCount))),
+        score: Math.max(0, Math.min(10, Number(input.score.toFixed(2)))),
+        durationSeconds: Math.max(0, Math.min(36000, Math.round(input.durationSeconds))),
+        createdAt: serverTimestamp(),
+      });
+    } catch (err) {
+      setSyncError('Erro ao salvar resultado do simulado.');
+      handleFirestoreError(err, OperationType.CREATE, path);
+    }
+  };
+
+  const addErrorEntry = async (input: {
+    questionId: string;
+    disciplineId: string;
+    topicTitle: string;
+    questionStem: string;
+    correctOption: string;
+    selectedOption: string;
+    errorReason: ErrorReason;
+    improvementNote: string;
+  }) => {
+    const safeQuestionId = sanitizeId(input.questionId);
+    const entryId = sanitizeId(`err_${safeQuestionId}`);
+
+    if (isGuest && !auth.currentUser) {
+      persistGuestPatch((prev) => {
+        const existingIdx = prev.errorNotebook.findIndex((e) => e.id === entryId);
+        if (existingIdx >= 0) {
+          const updated = [...prev.errorNotebook];
+          updated[existingIdx] = {
+            ...updated[existingIdx],
+            errorReason: input.errorReason,
+            improvementNote: input.improvementNote.slice(0, 2000),
+            nextReviewDate: addDaysIso(1),
+            reviewCount: updated[existingIdx].reviewCount + 1,
+            status: 'pending',
+          };
+          return { ...prev, errorNotebook: updated };
+        }
+        const entry: ErrorEntry = {
+          id: entryId,
+          userId: GUEST_UID,
+          questionId: safeQuestionId,
+          disciplineId: input.disciplineId.slice(0, 80),
+          topicTitle: input.topicTitle.slice(0, 200),
+          questionStem: input.questionStem.slice(0, 2000),
+          correctOption: input.correctOption.slice(0, 500),
+          selectedOption: input.selectedOption.slice(0, 500),
+          errorReason: input.errorReason,
+          improvementNote: input.improvementNote.slice(0, 2000),
+          nextReviewDate: addDaysIso(1),
+          reviewCount: 0,
+          status: 'pending',
+        };
+        return { ...prev, errorNotebook: [entry, ...prev.errorNotebook] };
+      });
+      return;
+    }
+
+    const current = ensureSignedIn();
+    const path = `users/${current.uid}/errorNotebook/${entryId}`;
+    const existing = errorNotebook.find((e) => e.id === entryId);
+    try {
+      if (existing) {
+        await updateDoc(doc(db, 'users', current.uid, 'errorNotebook', entryId), {
+          errorReason: input.errorReason,
+          improvementNote: input.improvementNote.slice(0, 2000),
+          nextReviewDate: addDaysIso(1),
+          reviewCount: existing.reviewCount + 1,
+          status: 'pending',
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(doc(db, 'users', current.uid, 'errorNotebook', entryId), {
+          userId: current.uid,
+          questionId: safeQuestionId,
+          disciplineId: input.disciplineId.slice(0, 80),
+          topicTitle: input.topicTitle.slice(0, 200),
+          questionStem: input.questionStem.slice(0, 2000),
+          correctOption: input.correctOption.slice(0, 500),
+          selectedOption: input.selectedOption.slice(0, 500),
+          errorReason: input.errorReason,
+          improvementNote: input.improvementNote.slice(0, 2000),
+          nextReviewDate: addDaysIso(1),
+          reviewCount: 0,
+          status: 'pending',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (err) {
+      setSyncError('Erro ao salvar no Caderno de Erros.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+    }
+  };
+
+  const updateErrorEntry = async (
+    entryId: string,
+    patch: Partial<Pick<ErrorEntry, 'errorReason' | 'improvementNote' | 'nextReviewDate' | 'reviewCount' | 'status'>>
+  ) => {
+    const safeId = sanitizeId(entryId);
+    if (isGuest && !auth.currentUser) {
+      persistGuestPatch((prev) => ({
+        ...prev,
+        errorNotebook: prev.errorNotebook.map((item) =>
+          item.id === safeId
+            ? {
+                ...item,
+                errorReason: patch.errorReason ?? item.errorReason,
+                improvementNote: (patch.improvementNote ?? item.improvementNote).slice(0, 2000),
+                nextReviewDate: (patch.nextReviewDate ?? item.nextReviewDate).slice(0, 20),
+                reviewCount: patch.reviewCount ?? item.reviewCount,
+                status: patch.status ?? item.status,
+              }
+            : item
+        ),
+      }));
+      return;
+    }
+
+    const current = ensureSignedIn();
+    const existing = errorNotebook.find((e) => e.id === safeId);
+    if (!existing) return;
+    const path = `users/${current.uid}/errorNotebook/${safeId}`;
+    try {
+      await updateDoc(doc(db, 'users', current.uid, 'errorNotebook', safeId), {
+        errorReason: patch.errorReason ?? existing.errorReason,
+        improvementNote: (patch.improvementNote ?? existing.improvementNote).slice(0, 2000),
+        nextReviewDate: (patch.nextReviewDate ?? existing.nextReviewDate).slice(0, 20),
+        reviewCount: patch.reviewCount ?? existing.reviewCount,
+        status: patch.status ?? existing.status,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      setSyncError('Erro ao atualizar revisão.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const deleteErrorEntry = async (entryId: string) => {
+    const safeId = sanitizeId(entryId);
+    if (isGuest && !auth.currentUser) {
+      persistGuestPatch((prev) => ({
+        ...prev,
+        errorNotebook: prev.errorNotebook.filter((item) => item.id !== safeId),
+      }));
+      return;
+    }
+
+    const current = ensureSignedIn();
+    const path = `users/${current.uid}/errorNotebook/${safeId}`;
+    try {
+      await deleteDoc(doc(db, 'users', current.uid, 'errorNotebook', safeId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, path);
+    }
+  };
+
+  const updateUserRole = async (targetUid: string, nextRole: NormalizedUserRole) => {
+    if (!canManageUsers) {
+      throw new Error('Apenas Administrador ou Desenvolvedor pode alterar permissões.');
+    }
+    const safeUid = sanitizeId(targetUid);
+    const path = `users/${safeUid}`;
+    try {
+      await updateDoc(doc(db, 'users', safeUid), {
+        role: nextRole,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      setSyncError('Erro ao atualizar perfil de acesso do usuário.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const addMaterial = async (input: {
+    title: string;
+    disciplineId: string;
+    libraryCategoryId?: LibraryCategoryId;
+    editalTopic?: string;
+    resourceType?: ResourceType;
+    fileType: MaterialFileType;
+    institution?: string;
+    url: string;
+    pricing?: 'gratuito' | 'pago';
+    publishedAt?: string;
+    lastVerifiedAt?: string;
+    linkStatus?: LinkStatus;
+    isOfficialContent?: boolean;
+    relevanceTier?: MaterialRelevanceTier;
+    campusLevel?: LibraryScope;
+    status?: PublicationStatus;
+    fileName?: string;
+    description?: string;
+    isShared?: boolean;
+    allowDownload?: boolean;
+    textLayerStatus?: StudyMaterial['textLayerStatus'];
+    pageCount?: number;
+    fileSizeBytes?: number;
+    version?: number;
+    versionNote?: string;
+  }) => {
+    const materialId = sanitizeId(`mat_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+    const todayIso = addDaysIso(0);
+
+    if (isGuest && !auth.currentUser) {
+      const newMat: StudyMaterial = {
+        id: materialId,
+        ownerId: GUEST_UID,
+        title: input.title.trim().slice(0, 200),
+        disciplineId: input.disciplineId.slice(0, 80),
+        libraryCategoryId: input.libraryCategoryId,
+        editalTopic: input.editalTopic?.trim().slice(0, 240),
+        resourceType: input.resourceType,
+        fileType: input.fileType,
+        institution: input.institution?.trim().slice(0, 160),
+        url: input.url.trim().slice(0, 2000),
+        pricing: input.pricing,
+        publishedAt: (input.publishedAt || todayIso).slice(0, 20),
+        lastVerifiedAt: (input.lastVerifiedAt || todayIso).slice(0, 20),
+        linkStatus: input.linkStatus,
+        isOfficialContent: input.isOfficialContent,
+        relevanceTier: input.relevanceTier,
+        campusLevel: input.campusLevel,
+        status: 'draft',
+        fileName: (input.fileName || '').slice(0, 240),
+        description: (input.description || '').slice(0, 1000),
+        allowDownload: input.allowDownload ?? true,
+        textLayerStatus: input.textLayerStatus,
+        pageCount: input.pageCount,
+        fileSizeBytes: input.fileSizeBytes,
+        version: input.version ?? 1,
+        versionNote: input.versionNote?.slice(0, 300),
+        isShared: false,
+      };
+      persistGuestPatch((prev) => ({
+        ...prev,
+        myMaterials: [newMat, ...prev.myMaterials],
+      }));
+      return;
+    }
+
+    const current = ensureSignedIn();
+    const resolvedStatus: PublicationStatus = canPublishShared
+      ? input.status || (input.isShared ? 'published' : 'draft')
+      : 'draft';
+    const canShare = Boolean(canPublishShared && resolvedStatus === 'published' && input.isShared !== false);
+    const path = `materials/${materialId}`;
+    try {
+      const payload: Record<string, unknown> = {
+        ownerId: current.uid,
+        title: input.title.trim().slice(0, 200),
+        disciplineId: input.disciplineId.slice(0, 80),
+        fileType: input.fileType,
+        url: input.url.trim().slice(0, 2000),
+        fileName: (input.fileName || '').slice(0, 240),
+        description: (input.description || '').slice(0, 1000),
+        isShared: canShare,
+        status: resolvedStatus,
+        updatedBy: current.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      if (input.libraryCategoryId) payload.libraryCategoryId = input.libraryCategoryId.slice(0, 80);
+      if (input.editalTopic) payload.editalTopic = input.editalTopic.trim().slice(0, 240);
+      if (input.resourceType) payload.resourceType = input.resourceType;
+      if (input.institution) payload.institution = input.institution.trim().slice(0, 160);
+      if (input.pricing) payload.pricing = input.pricing;
+      if (input.relevanceTier) payload.relevanceTier = input.relevanceTier;
+      if (input.campusLevel) payload.campusLevel = input.campusLevel;
+      payload.publishedAt = (input.publishedAt || todayIso).slice(0, 20);
+      payload.lastVerifiedAt = (input.lastVerifiedAt || todayIso).slice(0, 20);
+      if (input.linkStatus) payload.linkStatus = input.linkStatus;
+      if (input.isOfficialContent !== undefined) payload.isOfficialContent = Boolean(input.isOfficialContent);
+      if (input.allowDownload !== undefined) payload.allowDownload = Boolean(input.allowDownload);
+      if (input.textLayerStatus) payload.textLayerStatus = input.textLayerStatus;
+      if (input.pageCount !== undefined) payload.pageCount = Math.max(0, Math.min(20000, Math.round(input.pageCount)));
+      if (input.fileSizeBytes !== undefined) payload.fileSizeBytes = Math.max(0, Math.min(500000000, Math.round(input.fileSizeBytes)));
+      if (input.version !== undefined) payload.version = Math.max(1, Math.min(1000, Math.round(input.version)));
+      if (input.versionNote) payload.versionNote = input.versionNote.trim().slice(0, 300);
+
+      await setDoc(doc(db, 'materials', materialId), payload);
+    } catch (err) {
+      setSyncError('Erro ao salvar material.');
+      handleFirestoreError(err, OperationType.CREATE, path);
+    }
+  };
+
+  const updateMaterial = async (
+    materialId: string,
+    patch: Partial<Omit<StudyMaterial, 'id' | 'ownerId' | 'createdAt'>>
+  ) => {
+    const safeId = sanitizeId(materialId);
+    if (isGuest && !auth.currentUser) {
+      persistGuestPatch((prev) => ({
+        ...prev,
+        myMaterials: prev.myMaterials.map((m) => (m.id === safeId ? { ...m, ...patch } : m)),
+      }));
+      return;
+    }
+
+    const current = ensureSignedIn();
+    const path = `materials/${safeId}`;
+    try {
+      const updates: Record<string, unknown> = {
+        updatedAt: serverTimestamp(),
+      };
+      if (canAccessAdminPanel) updates.updatedBy = current.uid;
+      if (patch.title !== undefined) updates.title = patch.title.trim().slice(0, 200);
+      if (patch.disciplineId !== undefined) updates.disciplineId = patch.disciplineId.slice(0, 80);
+      if (patch.libraryCategoryId !== undefined) updates.libraryCategoryId = patch.libraryCategoryId;
+      if (patch.editalTopic !== undefined) updates.editalTopic = patch.editalTopic.trim().slice(0, 240);
+      if (patch.resourceType !== undefined) updates.resourceType = patch.resourceType;
+      if (patch.fileType !== undefined) updates.fileType = patch.fileType;
+      if (patch.institution !== undefined) updates.institution = patch.institution.trim().slice(0, 160);
+      if (patch.url !== undefined) updates.url = patch.url.trim().slice(0, 2000);
+      if (patch.pricing !== undefined) updates.pricing = patch.pricing;
+      if (patch.linkStatus !== undefined) updates.linkStatus = patch.linkStatus;
+      if (patch.isOfficialContent !== undefined) updates.isOfficialContent = Boolean(patch.isOfficialContent);
+      if (patch.relevanceTier !== undefined) updates.relevanceTier = patch.relevanceTier;
+      if (patch.campusLevel !== undefined) updates.campusLevel = patch.campusLevel;
+      if (patch.description !== undefined) updates.description = patch.description.slice(0, 1000);
+      if (patch.fileName !== undefined) updates.fileName = patch.fileName.slice(0, 240);
+      if (patch.allowDownload !== undefined) updates.allowDownload = Boolean(patch.allowDownload);
+      if (patch.textLayerStatus !== undefined) updates.textLayerStatus = patch.textLayerStatus;
+      if (patch.pageCount !== undefined) updates.pageCount = Math.max(0, Math.min(20000, Math.round(patch.pageCount)));
+      if (patch.fileSizeBytes !== undefined) updates.fileSizeBytes = Math.max(0, Math.min(500000000, Math.round(patch.fileSizeBytes)));
+      if (patch.version !== undefined) updates.version = Math.max(1, Math.min(1000, Math.round(patch.version)));
+      if (patch.versionNote !== undefined) updates.versionNote = patch.versionNote.trim().slice(0, 300);
+      if (canPublishShared && patch.status !== undefined) {
+        updates.status = patch.status;
+        updates.isShared = patch.status === 'published';
+      } else if (canPublishShared && patch.isShared !== undefined) {
+        updates.isShared = Boolean(patch.isShared);
+        updates.status = patch.isShared ? 'published' : 'draft';
+      }
+
+      await updateDoc(doc(db, 'materials', safeId), updates);
+    } catch (err) {
+      setSyncError('Erro ao atualizar material.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const updateMaterialStatus = async (materialId: string, status: PublicationStatus) => {
+    if (!canPublishShared) {
+      throw new Error('Você não tem permissão para alterar o status de publicação.');
+    }
+    const safeId = sanitizeId(materialId);
+    const current = ensureSignedIn();
+    const path = `materials/${safeId}`;
+    try {
+      await updateDoc(doc(db, 'materials', safeId), {
+        status,
+        isShared: status === 'published',
+        updatedBy: current.uid,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      setSyncError('Erro ao alterar status de publicação do material.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const deleteMaterial = async (materialId: string) => {
+    const safeId = sanitizeId(materialId);
+    if (isGuest && !auth.currentUser) {
+      persistGuestPatch((prev) => ({
+        ...prev,
+        myMaterials: prev.myMaterials.filter((m) => m.id !== safeId),
+      }));
+      return;
+    }
+
+    ensureSignedIn();
+    const path = `materials/${safeId}`;
+    try {
+      await deleteDoc(doc(db, 'materials', safeId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, path);
+    }
+  };
+
+  const addCustomQuestion = async (input: {
+    disciplineId: string;
+    topicTitle: string;
+    statement: string;
+    options: [string, string, string, string, string];
+    correctIndex: number;
+    explanation: string;
+    legalBasis?: string;
+    source?: string;
+    originType?: QuestionOriginType;
+    escolaridade?: CampusLevel;
+    isOfficial?: boolean;
+    isPublished?: boolean;
+    status?: PublicationStatus;
+  }) => {
+    const questionId = sanitizeId(`q_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+    const originType: QuestionOriginType = input.originType || 'training_platform';
+    const isOfficial = input.isOfficial ?? (originType !== 'training_platform' && originType !== 'ai_generated');
+
+    if (isGuest && !auth.currentUser) {
+      const newQuestion: Question = {
+        id: questionId,
+        authorId: GUEST_UID,
+        disciplineId: input.disciplineId.slice(0, 80),
+        topicTitle: input.topicTitle.trim().slice(0, 200),
+        statement: input.statement.trim().slice(0, 2500),
+        options: input.options.map((o) => o.trim().slice(0, 500)) as [string, string, string, string, string],
+        correctIndex: Math.max(0, Math.min(4, Math.round(input.correctIndex))),
+        explanation: input.explanation.trim().slice(0, 2000),
+        legalBasis: (input.legalBasis || '').slice(0, 400),
+        source: (
+          input.source || (isOfficial ? 'Prova / Fonte Oficial' : 'Treinamento Complementar (Não Oficial)')
+        ).slice(0, 160),
+        originType,
+        escolaridade: input.escolaridade,
+        isOfficial,
+        isPublished: false,
+        status: 'draft',
+      };
+      persistGuestPatch((prev) => ({
+        ...prev,
+        myQuestions: [newQuestion, ...prev.myQuestions],
+      }));
+      return;
+    }
+
+    const current = ensureSignedIn();
+    const resolvedStatus: PublicationStatus = canPublishShared
+      ? input.status || (input.isPublished ? 'published' : 'draft')
+      : 'draft';
+    const canPublish = Boolean(canPublishShared && resolvedStatus === 'published' && input.isPublished !== false);
+    const path = `sharedQuestions/${questionId}`;
+    try {
+      const payload: Record<string, unknown> = {
+        authorId: current.uid,
+        disciplineId: input.disciplineId.slice(0, 80),
+        topicTitle: input.topicTitle.trim().slice(0, 200),
+        statement: input.statement.trim().slice(0, 2500),
+        options: input.options.map((o) => o.trim().slice(0, 500)),
+        correctIndex: Math.max(0, Math.min(4, Math.round(input.correctIndex))),
+        explanation: input.explanation.trim().slice(0, 2000),
+        legalBasis: (input.legalBasis || '').slice(0, 400),
+        source: (
+          input.source || (isOfficial ? 'Prova / Fonte Oficial' : 'Treinamento Complementar (Não Oficial)')
+        ).slice(0, 160),
+        originType,
+        isOfficial,
+        isPublished: canPublish,
+        status: resolvedStatus,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      if (input.escolaridade) payload.escolaridade = input.escolaridade;
+      await setDoc(doc(db, 'sharedQuestions', questionId), payload);
+    } catch (err) {
+      setSyncError('Erro ao salvar questão.');
+      handleFirestoreError(err, OperationType.CREATE, path);
+    }
+  };
+
+  const updateCustomQuestion = async (
+    questionId: string,
+    patch: Partial<Omit<Question, 'id' | 'authorId'>>
+  ) => {
+    const safeId = sanitizeId(questionId);
+    ensureSignedIn();
+    const path = `sharedQuestions/${safeId}`;
+    try {
+      const updates: Record<string, unknown> = {
+        updatedAt: serverTimestamp(),
+      };
+      if (patch.disciplineId !== undefined) updates.disciplineId = patch.disciplineId.slice(0, 80);
+      if (patch.topicTitle !== undefined) updates.topicTitle = patch.topicTitle.trim().slice(0, 200);
+      if (patch.statement !== undefined) updates.statement = patch.statement.trim().slice(0, 2500);
+      if (patch.options !== undefined) updates.options = patch.options.slice(0, 5).map((o) => o.trim().slice(0, 500));
+      if (patch.correctIndex !== undefined) updates.correctIndex = Math.max(0, Math.min(4, Math.round(patch.correctIndex)));
+      if (patch.explanation !== undefined) updates.explanation = patch.explanation.trim().slice(0, 2000);
+      if (patch.legalBasis !== undefined) updates.legalBasis = patch.legalBasis.slice(0, 400);
+      if (patch.source !== undefined) updates.source = patch.source.slice(0, 160);
+      if (patch.originType !== undefined) updates.originType = patch.originType;
+      if (patch.escolaridade !== undefined) updates.escolaridade = patch.escolaridade;
+      if (patch.isOfficial !== undefined) updates.isOfficial = Boolean(patch.isOfficial);
+      if (canPublishShared && patch.status !== undefined) {
+        updates.status = patch.status;
+        updates.isPublished = patch.status === 'published';
+      } else if (canPublishShared && patch.isPublished !== undefined) {
+        updates.isPublished = Boolean(patch.isPublished);
+        updates.status = patch.isPublished ? 'published' : 'draft';
+      }
+      await updateDoc(doc(db, 'sharedQuestions', safeId), updates);
+    } catch (err) {
+      setSyncError('Erro ao atualizar questão.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const updateQuestionStatus = async (questionId: string, status: PublicationStatus) => {
+    if (!canPublishShared) {
+      throw new Error('Apenas perfis autorizados podem publicar ou arquivar questões.');
+    }
+    const safeId = sanitizeId(questionId);
+    ensureSignedIn();
+    const path = `sharedQuestions/${safeId}`;
+    try {
+      await updateDoc(doc(db, 'sharedQuestions', safeId), {
+        status,
+        isPublished: status === 'published',
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      setSyncError('Erro ao atualizar status da questão.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const deleteCustomQuestion = async (questionId: string) => {
+    const safeId = sanitizeId(questionId);
+    if (isGuest && !auth.currentUser) {
+      persistGuestPatch((prev) => ({
+        ...prev,
+        myQuestions: prev.myQuestions.filter((q) => q.id !== safeId),
+      }));
+      return;
+    }
+    ensureSignedIn();
+    const path = `sharedQuestions/${safeId}`;
+    try {
+      await deleteDoc(doc(db, 'sharedQuestions', safeId));
+    } catch (err) {
+      setSyncError('Erro ao excluir questão.');
+      handleFirestoreError(err, OperationType.DELETE, path);
+    }
+  };
+
+  const saveManagedDiscipline = async (input: {
+    id?: string;
+    name: string;
+    shortName: string;
+    campusLevel: CampusLevel;
+    editalBlock: Discipline['editalBlock'];
+    priorityRank: number;
+    examQuestions: number;
+    examPoints: number;
+    tieBreakerOrder: number;
+    recommendedMinutesPerCycle: number;
+    status: PublicationStatus;
+  }): Promise<string> => {
+    if (!canAccessAdminPanel) {
+      throw new Error('Acesso restrito a administradores e editores.');
+    }
+    const current = ensureSignedIn();
+    const id = sanitizeId(input.id || `disc_${input.campusLevel}_${Date.now().toString(36)}`);
+    const path = `managedDisciplines/${id}`;
+    try {
+      const ref = doc(db, 'managedDisciplines', id);
+      const snap = await getDoc(ref);
+      const commonFields = {
+        name: input.name.trim().slice(0, 160),
+        shortName: input.shortName.trim().slice(0, 60),
+        campusLevel: input.campusLevel,
+        editalBlock: input.editalBlock,
+        priorityRank: Math.max(1, Math.min(100, Math.round(input.priorityRank))),
+        examQuestions: Math.max(0, Math.min(200, Math.round(input.examQuestions))),
+        examPoints: Math.max(0, Math.min(200, Number(input.examPoints))),
+        tieBreakerOrder: Math.max(1, Math.min(100, Math.round(input.tieBreakerOrder))),
+        recommendedMinutesPerCycle: Math.max(10, Math.min(360, Math.round(input.recommendedMinutesPerCycle))),
+        status: input.status,
+        updatedAt: serverTimestamp(),
+      };
+      if (snap.exists()) {
+        await updateDoc(ref, commonFields);
+      } else {
+        await setDoc(ref, {
+          id,
+          ...commonFields,
+          authorId: current.uid,
+          createdAt: serverTimestamp(),
+        });
+      }
+      return id;
+    } catch (err) {
+      setSyncError('Erro ao salvar disciplina.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+      return id;
+    }
+  };
+
+  const updateManagedDisciplineStatus = async (disciplineId: string, status: PublicationStatus) => {
+    if (!canAccessAdminPanel) throw new Error('Acesso restrito.');
+    const safeId = sanitizeId(disciplineId);
+    const path = `managedDisciplines/${safeId}`;
+    try {
+      await updateDoc(doc(db, 'managedDisciplines', safeId), {
+        status,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      setSyncError('Erro ao atualizar status da disciplina.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const saveManagedTopic = async (input: {
+    topicId?: string;
+    disciplineId: string;
+    campusLevel: CampusLevel;
+    title: string;
+    subtopics: string[];
+    highYield: boolean;
+    order: number;
+    status: PublicationStatus;
+  }): Promise<string> => {
+    if (!canAccessAdminPanel) {
+      throw new Error('Acesso restrito a administradores e editores.');
+    }
+    const current = ensureSignedIn();
+    const topicId = sanitizeId(input.topicId || `topic_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`);
+    const path = `managedTopics/${topicId}`;
+    try {
+      const ref = doc(db, 'managedTopics', topicId);
+      const snap = await getDoc(ref);
+      const commonFields = {
+        disciplineId: sanitizeId(input.disciplineId).slice(0, 80),
+        campusLevel: input.campusLevel,
+        title: input.title.trim().slice(0, 240),
+        subtopics: input.subtopics.map((s) => s.trim()).filter(Boolean).slice(0, 30),
+        highYield: Boolean(input.highYield),
+        order: Math.max(0, Math.min(500, Math.round(input.order))),
+        status: input.status,
+        updatedAt: serverTimestamp(),
+      };
+      if (snap.exists()) {
+        await updateDoc(ref, commonFields);
+      } else {
+        await setDoc(ref, {
+          topicId,
+          ...commonFields,
+          authorId: current.uid,
+          createdAt: serverTimestamp(),
+        });
+      }
+      return topicId;
+    } catch (err) {
+      setSyncError('Erro ao salvar tópico do edital.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+      return topicId;
+    }
+  };
+
+  const updateManagedTopicStatus = async (topicId: string, status: PublicationStatus) => {
+    if (!canAccessAdminPanel) throw new Error('Acesso restrito.');
+    const safeId = sanitizeId(topicId);
+    const path = `managedTopics/${safeId}`;
+    try {
+      await updateDoc(doc(db, 'managedTopics', safeId), {
+        status,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      setSyncError('Erro ao atualizar status do tópico.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const saveSimuladoList = async (input: {
+    listId?: string;
+    title: string;
+    description?: string;
+    campusLevel: LibraryScope;
+    durationMinutes: number;
+    questionIds: string[];
+    status: PublicationStatus;
+  }): Promise<string> => {
+    if (!canAccessAdminPanel) {
+      throw new Error('Acesso restrito a administradores e editores.');
+    }
+    const current = ensureSignedIn();
+    const listId = sanitizeId(input.listId || `simlist_${Date.now().toString(36)}`);
+    const path = `simuladoLists/${listId}`;
+    try {
+      const ref = doc(db, 'simuladoLists', listId);
+      const snap = await getDoc(ref);
+      const commonFields = {
+        title: input.title.trim().slice(0, 180),
+        description: (input.description || '').trim().slice(0, 800),
+        campusLevel: input.campusLevel,
+        durationMinutes: Math.max(5, Math.min(360, Math.round(input.durationMinutes))),
+        questionIds: input.questionIds.slice(0, 100),
+        status: input.status,
+        updatedAt: serverTimestamp(),
+      };
+      if (snap.exists()) {
+        await updateDoc(ref, commonFields);
+      } else {
+        await setDoc(ref, {
+          listId,
+          ...commonFields,
+          authorId: current.uid,
+          createdAt: serverTimestamp(),
+        });
+      }
+      return listId;
+    } catch (err) {
+      setSyncError('Erro ao salvar lista de simulado.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+      return listId;
+    }
+  };
+
+  const updateSimuladoListStatus = async (listId: string, status: PublicationStatus) => {
+    if (!canAccessAdminPanel) throw new Error('Acesso restrito.');
+    const safeId = sanitizeId(listId);
+    const path = `simuladoLists/${safeId}`;
+    try {
+      await updateDoc(doc(db, 'simuladoLists', safeId), {
+        status,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      setSyncError('Erro ao atualizar status do simulado.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const savePlatformNotice = async (input: {
+    noticeId?: string;
+    title: string;
+    body: string;
+    campusLevel: LibraryScope;
+    priority: 'normal' | 'importante' | 'urgente';
+    eventDate?: string;
+    status: PublicationStatus;
+  }): Promise<string> => {
+    if (!canAccessAdminPanel) {
+      throw new Error('Acesso restrito a administradores e editores.');
+    }
+    const current = ensureSignedIn();
+    const noticeId = sanitizeId(input.noticeId || `notice_${Date.now().toString(36)}`);
+    const path = `platformNotices/${noticeId}`;
+    try {
+      const ref = doc(db, 'platformNotices', noticeId);
+      const snap = await getDoc(ref);
+      const commonFields: Record<string, unknown> = {
+        title: input.title.trim().slice(0, 180),
+        body: input.body.trim().slice(0, 2000),
+        campusLevel: input.campusLevel,
+        priority: input.priority,
+        status: input.status,
+        updatedAt: serverTimestamp(),
+      };
+      if (input.eventDate?.trim()) {
+        commonFields.eventDate = input.eventDate.trim().slice(0, 20);
+      }
+      if (snap.exists()) {
+        await updateDoc(ref, commonFields);
+      } else {
+        await setDoc(ref, {
+          noticeId,
+          ...commonFields,
+          authorId: current.uid,
+          createdAt: serverTimestamp(),
+        });
+      }
+      return noticeId;
+    } catch (err) {
+      setSyncError('Erro ao salvar aviso.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+      return noticeId;
+    }
+  };
+
+  const updatePlatformNoticeStatus = async (noticeId: string, status: PublicationStatus) => {
+    if (!canAccessAdminPanel) throw new Error('Acesso restrito.');
+    const safeId = sanitizeId(noticeId);
+    const path = `platformNotices/${safeId}`;
+    try {
+      await updateDoc(doc(db, 'platformNotices', safeId), {
+        status,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      setSyncError('Erro ao atualizar status do aviso.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const inviteFamilyMember = async (input: {
+    name: string;
+    email: string;
+    relationship: string;
+    canPublish: boolean;
+  }) => {
+    const current = ensureSignedIn();
+    const cleanEmail = input.email.trim().toLowerCase().slice(0, 160);
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      throw new Error('Informe um e-mail válido do familiar.');
+    }
+    const memberId = toFamilyMemberDocId(cleanEmail);
+    const path = `familyMembers/${memberId}`;
+    try {
+      const ref = doc(db, 'familyMembers', memberId);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        await updateDoc(ref, {
+          name: input.name.trim().slice(0, 120) || cleanEmail.split('@')[0],
+          relationship: input.relationship.trim().slice(0, 60) || 'Familiar',
+          canPublish: Boolean(input.canPublish),
+          active: true,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(ref, {
+          memberId,
+          name: input.name.trim().slice(0, 120) || cleanEmail.split('@')[0],
+          email: cleanEmail,
+          relationship: input.relationship.trim().slice(0, 60) || 'Familiar',
+          canPublish: Boolean(input.canPublish),
+          active: true,
+          invitedByUid: current.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (err) {
+      setSyncError('Erro ao salvar autorização do familiar.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+    }
+  };
+
+  const toggleFamilyMemberPublish = async (memberId: string, canPublish: boolean) => {
+    ensureSignedIn();
+    const safeId = sanitizeId(memberId);
+    const path = `familyMembers/${safeId}`;
+    try {
+      await updateDoc(doc(db, 'familyMembers', safeId), {
+        canPublish: Boolean(canPublish),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      setSyncError('Erro ao atualizar permissão do familiar.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const toggleFamilyMemberActive = async (memberId: string, active: boolean) => {
+    ensureSignedIn();
+    const safeId = sanitizeId(memberId);
+    const path = `familyMembers/${safeId}`;
+    try {
+      await updateDoc(doc(db, 'familyMembers', safeId), {
+        active: Boolean(active),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      setSyncError('Erro ao atualizar status do familiar.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const removeFamilyMember = async (memberId: string) => {
+    ensureSignedIn();
+    const safeId = sanitizeId(memberId);
+    const path = `familyMembers/${safeId}`;
+    try {
+      await deleteDoc(doc(db, 'familyMembers', safeId));
+    } catch (err) {
+      setSyncError('Erro ao remover familiar.');
+      handleFirestoreError(err, OperationType.DELETE, path);
+    }
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isGuest,
+        profile,
+        authLoading,
+        syncError,
+        clearSyncError: () => setSyncError(null),
+        workspaceAccessToken,
+        connectGoogleWorkspace,
+        clearWorkspaceToken,
+        effectiveRole,
+        isAdmin,
+        isEditor,
+        isDev,
+        canAccessAdminPanel,
+        canManageUsers,
+        canPublishShared,
+        activeWorkspaceMode: activeWorkspaceModeState,
+        setActiveWorkspaceMode,
+        getIdToken,
+        myFamilyMembership,
+        familyMembers,
+        accessSessions,
+        allUsers,
+        updateAccessPresenceContext,
+        inviteFamilyMember,
+        toggleFamilyMemberPublish,
+        toggleFamilyMemberActive,
+        removeFamilyMember,
+        topicProgressMap,
+        disciplineGoalsMap,
+        readingProgressMap,
+        studySessions,
+        simuladoAttempts,
+        errorNotebook,
+        materials,
+        allManagedMaterials,
+        questions,
+        allManagedQuestions,
+        managedDisciplines,
+        allManagedDisciplines,
+        managedTopics,
+        allManagedTopics,
+        simuladoLists,
+        allManagedSimuladoLists,
+        platformNotices,
+        allManagedNotices,
+        getCampusDisciplines,
+        loginWithEmail,
+        registerWithEmail,
+        loginWithGoogle,
+        enterGuestMode,
+        exitGuestMode,
+        resendVerification,
+        refreshAuthState,
+        logout,
+        updateProfileSettings,
+        updateUserRole,
+        saveDisciplineWeeklyGoal,
+        saveTopicProgress,
+        saveReadingProgress,
+        deleteReadingProgress,
+        logStudySession,
+        saveSimuladoAttempt,
+        addErrorEntry,
+        updateErrorEntry,
+        deleteErrorEntry,
+        addMaterial,
+        updateMaterial,
+        updateMaterialStatus,
+        deleteMaterial,
+        addCustomQuestion,
+        updateCustomQuestion,
+        updateQuestionStatus,
+        deleteCustomQuestion,
+        saveManagedDiscipline,
+        updateManagedDisciplineStatus,
+        saveManagedTopic,
+        updateManagedTopicStatus,
+        saveSimuladoList,
+        updateSimuladoListStatus,
+        savePlatformNotice,
+        updatePlatformNoticeStatus,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth deve ser utilizado dentro de AuthProvider');
+  return ctx;
+}

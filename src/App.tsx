@@ -1,0 +1,1141 @@
+import React, { Suspense, lazy, useEffect, useState } from 'react';
+import {
+  ArrowLeft,
+  BarChart3,
+  Bell,
+  BookMarked,
+  BookOpen,
+  CalendarDays,
+  CheckSquare,
+  ChevronRight,
+  Compass,
+  FileText,
+  GraduationCap,
+  Headphones,
+  Home,
+  Layers,
+  LayoutGrid,
+  Loader2,
+  LogIn,
+  LogOut,
+  Menu,
+  RotateCcw,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  UserCheck,
+  Users,
+  Video,
+  X,
+} from 'lucide-react';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthView } from './components/AuthView';
+import type { GeminiTargetPreset } from './components/GeminiSummaryView';
+import { OfflineIndicator, PWAInstallButton } from './components/PWAInstallButton';
+import { ShareAppButton } from './components/ShareAppModal';
+import { CONCURSO_PROFILE, formatDateKey } from './data/alepaSyllabus';
+import { useStudyAlert } from './hooks/useStudyAlert';
+import { CampusLevel, LibraryScope, MedioCargoGroup, NavSection, formatRoleLabel } from './types';
+
+// Route-level code splitting for faster initial mobile load
+const DashboardView = lazy(() =>
+  import('./components/DashboardView').then((m) => ({ default: m.DashboardView }))
+);
+const PreparationView = lazy(() =>
+  import('./components/PreparationView').then((m) => ({ default: m.PreparationView }))
+);
+const DisciplinesView = lazy(() =>
+  import('./components/DisciplinesView').then((m) => ({ default: m.DisciplinesView }))
+);
+const StudyRoomView = lazy(() =>
+  import('./components/StudyRoomView').then((m) => ({ default: m.StudyRoomView }))
+);
+const ScheduleView = lazy(() =>
+  import('./components/ScheduleView').then((m) => ({ default: m.ScheduleView }))
+);
+const SimuladosView = lazy(() =>
+  import('./components/SimuladosView').then((m) => ({ default: m.SimuladosView }))
+);
+const ErrorNotebookView = lazy(() =>
+  import('./components/ErrorNotebookView').then((m) => ({ default: m.ErrorNotebookView }))
+);
+const PodcastsView = lazy(() =>
+  import('./components/PodcastsView').then((m) => ({ default: m.PodcastsView }))
+);
+const VideosView = lazy(() =>
+  import('./components/VideosView').then((m) => ({ default: m.VideosView }))
+);
+const GeminiSummaryView = lazy(() =>
+  import('./components/GeminiSummaryView').then((m) => ({ default: m.GeminiSummaryView }))
+);
+const MaterialsView = lazy(() =>
+  import('./components/MaterialsView').then((m) => ({ default: m.MaterialsView }))
+);
+const PerformanceView = lazy(() =>
+  import('./components/PerformanceView').then((m) => ({ default: m.PerformanceView }))
+);
+const FamilyAccessView = lazy(() =>
+  import('./components/FamilyAccessView').then((m) => ({ default: m.FamilyAccessView }))
+);
+const SettingsView = lazy(() =>
+  import('./components/SettingsView').then((m) => ({ default: m.SettingsView }))
+);
+const AdminConsoleView = lazy(() =>
+  import('./components/AdminConsoleView').then((m) => ({ default: m.AdminConsoleView }))
+);
+
+function RouteLoadingFallback() {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 min-h-[240px]">
+      <Loader2 className="w-6 h-6 animate-spin text-[#146C43]" />
+      <p className="text-xs font-medium text-slate-600">Carregando módulo de estudo...</p>
+    </div>
+  );
+}
+
+interface SidebarNavGroup {
+  groupLabel: string;
+  items: Array<{
+    id: NavSection;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }>;
+}
+
+const SIDEBAR_GROUPS: SidebarNavGroup[] = [
+  {
+    groupLabel: 'Aprender',
+    items: [
+      { id: 'dashboard', label: 'Painel Inicial', icon: Home },
+      { id: 'preparation', label: 'Minha Preparação', icon: Compass },
+      { id: 'disciplines', label: 'Disciplinas e Edital', icon: BookOpen },
+      { id: 'study_room', label: 'Sala de Estudo', icon: BookMarked },
+      { id: 'materials', label: 'Central de Estudos', icon: FileText },
+      { id: 'videos', label: 'Videoaulas', icon: Video },
+      { id: 'podcasts', label: 'Podcasts & Spotify', icon: Headphones },
+      { id: 'gemini', label: 'Professor IA', icon: Sparkles },
+    ],
+  },
+  {
+    groupLabel: 'Praticar',
+    items: [{ id: 'simulados', label: 'Questões e Simulados', icon: CheckSquare }],
+  },
+  {
+    groupLabel: 'Evoluir',
+    items: [
+      { id: 'schedule', label: 'Cronograma 2h', icon: CalendarDays },
+      { id: 'revisions', label: 'Revisões & Erros', icon: RotateCcw },
+      { id: 'performance', label: 'Desempenho', icon: BarChart3 },
+    ],
+  },
+  {
+    groupLabel: 'Conta',
+    items: [
+      { id: 'family', label: 'Familiares', icon: Users },
+      { id: 'settings', label: 'Configurações', icon: Settings },
+    ],
+  },
+];
+
+function CampusShell() {
+  const {
+    user,
+    isGuest,
+    profile,
+    authLoading,
+    logout,
+    exitGuestMode,
+    syncError,
+    clearSyncError,
+    studySessions,
+    updateAccessPresenceContext,
+    canAccessAdminPanel,
+    effectiveRole,
+    setActiveWorkspaceMode,
+  } = useAuth();
+
+  const [activeTab, setActiveTab] = useState<NavSection>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('acesso') === 'familiar') {
+        return 'family';
+      }
+    } catch {
+      // ignore query param error
+    }
+    return 'dashboard';
+  });
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('acesso') === 'familiar' && !user && isGuest) {
+        exitGuestMode();
+      }
+    } catch {
+      // ignore
+    }
+  }, [user, isGuest, exitGuestMode]);
+
+  const [selectedCampus, setSelectedCampus] = useState<CampusLevel>(() => {
+    try {
+      const saved = localStorage.getItem('concurso_alepa_campus');
+      return saved === 'medio' || saved === 'superior' ? saved : 'superior';
+    } catch {
+      return 'superior';
+    }
+  });
+  const [selectedMedioCargo, setSelectedMedioCargo] = useState<MedioCargoGroup>(() => {
+    try {
+      const saved = localStorage.getItem('concurso_alepa_medio_cargo');
+      return saved === 'cargo_01_04' || saved === 'cargo_01' || saved === 'cargo_02' || saved === 'cargo_03'
+        ? saved
+        : 'cargo_01_04';
+    } catch {
+      return 'cargo_01_04';
+    }
+  });
+  const [timerPreset, setTimerPreset] = useState<{ disciplineId?: string; topicTitle?: string }>({});
+  const [contentInitialScope, setContentInitialScope] = useState<LibraryScope | undefined>(undefined);
+  const [geminiPreset, setGeminiPreset] = useState<GeminiTargetPreset | null>(null);
+  const [studyRoomTarget, setStudyRoomTarget] = useState<{ disciplineId?: string; topicId?: string }>({});
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    updateAccessPresenceContext(activeTab, selectedCampus);
+  }, [activeTab, selectedCampus, updateAccessPresenceContext]);
+
+  useEffect(() => {
+    if (!canAccessAdminPanel && activeTab === 'admin') {
+      setActiveTab('dashboard');
+      setActiveWorkspaceMode('student');
+    }
+  }, [canAccessAdminPanel, activeTab, setActiveWorkspaceMode]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mobileMenuOpen]);
+
+  const handleChangeCampus = (campus: CampusLevel) => {
+    setSelectedCampus(campus);
+    setStudyRoomTarget({});
+    try {
+      localStorage.setItem('concurso_alepa_campus', campus);
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const handleChangeMedioCargo = (group: MedioCargoGroup) => {
+    setSelectedMedioCargo(group);
+    setStudyRoomTarget({});
+    try {
+      localStorage.setItem('concurso_alepa_medio_cargo', group);
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const todayKey = formatDateKey(new Date());
+  const dailyGoal = profile?.dailyGoalMinutes || CONCURSO_PROFILE.dailyGoalMinutes;
+  const minutesToday = studySessions
+    .filter((s) => s.dateKey === todayKey)
+    .reduce((acc, s) => acc + s.durationMinutes, 0);
+
+  const {
+    settings: alertSettings,
+    updateSettings: updateAlertSettings,
+    activeAlertMessage,
+    dismissAlert,
+    notificationPermission,
+    requestNotificationPermission,
+    fireStudyAlert,
+  } = useStudyAlert(minutesToday, dailyGoal, selectedCampus);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#F5F7F6] flex items-center justify-center p-6">
+        <div className="text-center space-y-2">
+          <Loader2 className="w-7 h-7 animate-spin text-[#0B3321] mx-auto" />
+          <p className="font-display text-xl font-bold text-slate-900">Meu Campus ALEPA 2026</p>
+          <p className="text-sm text-slate-500">Carregando área de estudos...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user && !isGuest) {
+    return <AuthView />;
+  }
+
+  const primaryMobileTabs: Array<{
+    id: NavSection;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }> = [
+    { id: 'dashboard', label: 'Início', icon: Home },
+    { id: 'materials', label: 'Conteúdo', icon: FileText },
+    { id: 'schedule', label: 'Cronograma', icon: CalendarDays },
+    { id: 'simulados', label: 'Questões', icon: CheckSquare },
+  ];
+
+  const isMoreTabActive =
+    activeTab !== 'dashboard' &&
+    activeTab !== 'materials' &&
+    activeTab !== 'schedule' &&
+    activeTab !== 'simulados';
+
+  const mobileSheetItems: Array<{
+    id: NavSection;
+    label: string;
+    subtitle: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }> = [
+    {
+      id: 'preparation',
+      label: 'Minha Preparação',
+      subtitle: 'Rota de estudos e edital',
+      icon: Compass,
+    },
+    {
+      id: 'study_room',
+      label: 'Sala de Estudo',
+      subtitle: 'Flashcards, mapa e quiz',
+      icon: BookMarked,
+    },
+    {
+      id: 'disciplines',
+      label: 'Disciplinas & Edital',
+      subtitle: 'Tópicos e prioridades',
+      icon: BookOpen,
+    },
+    {
+      id: 'gemini',
+      label: 'Professor IA',
+      subtitle: 'Resumos, cards e plano',
+      icon: Sparkles,
+    },
+    {
+      id: 'podcasts',
+      label: 'Podcasts & Spotify',
+      subtitle: 'Áudios por matéria',
+      icon: Headphones,
+    },
+    {
+      id: 'videos',
+      label: 'Vídeos & Aulas',
+      subtitle: 'YouTube, IG e TikTok',
+      icon: Video,
+    },
+    {
+      id: 'revisions',
+      label: 'Revisões / Erros',
+      subtitle: 'Caderno espaçado',
+      icon: RotateCcw,
+    },
+    {
+      id: 'performance',
+      label: 'Desempenho',
+      subtitle: 'Evolução e simulados',
+      icon: BarChart3,
+    },
+    {
+      id: 'family',
+      label: 'Familiares',
+      subtitle: 'Acesso compartilhado',
+      icon: Users,
+    },
+    {
+      id: 'settings',
+      label: 'Configurações',
+      subtitle: 'Meta, cargo e conta',
+      icon: Settings,
+    },
+  ];
+
+  const activeSectionLabel =
+    activeTab === 'admin'
+      ? 'Painel Administrativo'
+      : activeTab === 'preparation'
+      ? 'Minha Preparação'
+      : activeTab === 'study_room'
+        ? 'Sala de Estudo'
+        : activeTab === 'disciplines'
+          ? 'Disciplinas & Edital'
+          : activeTab === 'schedule'
+            ? 'Cronograma 2h'
+            : activeTab === 'simulados'
+              ? 'Simulados e Questões'
+              : activeTab === 'revisions'
+                ? 'Revisões / Erros'
+                : activeTab === 'podcasts'
+                  ? 'Podcasts & Spotify'
+                  : activeTab === 'videos'
+                    ? 'Videoaulas'
+                    : activeTab === 'gemini'
+                      ? 'Professor IA & Resumos'
+                      : activeTab === 'materials'
+                        ? 'Central de Estudos'
+                        : activeTab === 'performance'
+                          ? 'Desempenho'
+                          : activeTab === 'family'
+                            ? 'Familiares'
+                            : activeTab === 'settings'
+                              ? 'Configurações'
+                              : 'Painel Inicial';
+
+  const handleStartFocusTimer = (disciplineId: string, topicTitle: string) => {
+    setTimerPreset({ disciplineId, topicTitle });
+    navigateTo('schedule');
+  };
+
+  const navigateTo = (section: NavSection) => {
+    if (section === 'admin' && !canAccessAdminPanel) {
+      return;
+    }
+    setActiveTab(section);
+    setActiveWorkspaceMode(section === 'admin' ? 'admin' : 'student');
+    setMobileMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleOpenStudyRoom = (disciplineId: string, topicId: string) => {
+    setStudyRoomTarget({ disciplineId, topicId });
+    navigateTo('study_room');
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F5F7F6] text-[#1E293B] flex overflow-x-hidden max-w-full">
+      {/* Structured Desktop Sidebar (visible at lg >= 1024px) */}
+      <aside
+        aria-label="Menu principal lateral"
+        className={`hidden lg:flex flex-col shrink-0 bg-white border-r border-slate-200/90 sticky top-0 h-screen transition-all duration-200 ${
+          sidebarCollapsed ? 'w-20' : 'w-64'
+        }`}
+      >
+        <div className="h-16 px-4 border-b border-slate-200/80 flex items-center justify-between gap-2">
+          {!sidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => navigateTo('dashboard')}
+              className="text-left min-w-0"
+            >
+              <p className="font-display text-sm font-bold text-[#0B3321] truncate">Meu Campus ALEPA</p>
+              <p className="text-[11px] font-mono text-slate-500 truncate">
+                2026 · {selectedCampus === 'medio' ? 'Médio (PL.AL.060)' : 'Superior (PL.AL.102)'}
+              </p>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((c) => !c)}
+            aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+            title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+            className="min-w-[38px] min-h-[38px] rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 mx-auto"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-2.5 py-4 space-y-5">
+          {canAccessAdminPanel && (
+            <div className="space-y-1">
+              {!sidebarCollapsed && (
+                <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                  Gestão ({formatRoleLabel(effectiveRole)})
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => navigateTo(activeTab === 'admin' ? 'dashboard' : 'admin')}
+                title="Painel Administrativo / Editor"
+                className={`w-full min-h-[40px] px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-colors ${
+                  sidebarCollapsed ? 'justify-center px-0' : ''
+                } ${
+                  activeTab === 'admin'
+                    ? 'bg-[#0B3321] text-white shadow-2xs'
+                    : 'bg-emerald-50 text-[#0B3321] border border-emerald-200 hover:bg-emerald-100'
+                }`}
+              >
+                <ShieldCheck
+                  className={`w-4 h-4 shrink-0 ${activeTab === 'admin' ? 'text-emerald-300' : 'text-[#146C43]'}`}
+                />
+                {!sidebarCollapsed && (
+                  <span className="truncate">
+                    {activeTab === 'admin' ? 'Ambiente Admin (Ativo)' : 'Painel Admin / Editor'}
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
+
+          {SIDEBAR_GROUPS.map((group) => (
+            <div key={group.groupLabel} className="space-y-1">
+              {!sidebarCollapsed && (
+                <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  {group.groupLabel}
+                </p>
+              )}
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => navigateTo(item.id)}
+                    title={item.label}
+                    className={`w-full min-h-[40px] px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-colors ${
+                      sidebarCollapsed ? 'justify-center px-0' : ''
+                    } ${
+                      active
+                        ? 'bg-[#0B3321] text-white shadow-2xs'
+                        : 'text-slate-700 hover:bg-[#E8F3EC] hover:text-[#0B3321]'
+                    }`}
+                  >
+                    <Icon
+                      className={`w-4 h-4 shrink-0 ${active ? 'text-emerald-300' : 'text-[#146C43]'}`}
+                    />
+                    {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+
+        {/* Sidebar Footer: Account Status */}
+        <div className="p-3 border-t border-slate-200/80">
+          {isGuest && !user ? (
+            <button
+              type="button"
+              onClick={exitGuestMode}
+              title="Fazer Login para sincronizar na nuvem"
+              className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-[#0B3321] hover:bg-[#134b32] text-white text-xs font-semibold flex items-center justify-center gap-2"
+            >
+              <LogIn className="w-4 h-4 shrink-0" />
+              {!sidebarCollapsed && <span className="truncate">Fazer Login</span>}
+            </button>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              {!sidebarCollapsed && (
+                <button
+                  type="button"
+                  onClick={() => navigateTo('settings')}
+                  className="flex items-center gap-2 min-w-0 text-left hover:opacity-80"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-[#E8F3EC] text-[#0B3321] flex items-center justify-center shrink-0">
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 truncate">
+                      {profile?.displayName?.split(' ')[0] || 'Estudante'}
+                    </p>
+                    <p className="text-[10px] text-[#146C43] truncate">Nuvem ativa</p>
+                  </div>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={logout}
+                aria-label="Sair da conta"
+                title="Sair / Trocar conta"
+                className="min-w-[36px] min-h-[36px] rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 mx-auto"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* Main Column */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        {/* Top Bar (Compact on Mobile/Tablet, Slim Utility Bar on Desktop) */}
+        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 min-w-0">
+              {/* Mobile/Tablet Menu Drawer Button (quick access from header as well as Bottom Bar) */}
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="Abrir menu completo"
+                className="lg:hidden min-w-[40px] min-h-[40px] -ml-1 rounded-xl hover:bg-slate-100 text-slate-700 flex items-center justify-center shrink-0"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigateTo('dashboard')}
+                className="font-display text-sm sm:text-base font-bold tracking-tight text-slate-900 whitespace-nowrap truncate text-left flex items-center gap-2 min-h-[40px]"
+              >
+                <span className="lg:hidden">ALEPA 2026</span>
+                <span className="hidden lg:inline text-slate-500 font-medium text-xs">
+                  Meu Campus ALEPA / <strong className="text-slate-900 font-semibold">{activeSectionLabel}</strong>
+                </span>
+                <span className="lg:hidden text-[10px] font-mono font-semibold text-[#146C43] bg-[#E8F3EC] border border-emerald-200 px-1.5 py-0.5 rounded-md">
+                  {selectedCampus === 'medio' ? 'Médio' : 'Superior'}
+                </span>
+              </button>
+            </div>
+
+            {/* Campus Quick Switcher on Desktop Top Bar */}
+            <div className="hidden md:flex items-center gap-1 p-1 bg-slate-100 rounded-xl shrink-0">
+              <button
+                type="button"
+                onClick={() => handleChangeCampus('superior')}
+                className={`min-h-[34px] px-3 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
+                  selectedCampus === 'superior' ? 'bg-[#0B3321] text-white' : 'text-slate-700 hover:text-slate-900'
+                }`}
+              >
+                Superior · PL.AL.102
+              </button>
+              <button
+                type="button"
+                onClick={() => handleChangeCampus('medio')}
+                className={`min-h-[34px] px-3 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
+                  selectedCampus === 'medio' ? 'bg-[#0B3321] text-white' : 'text-slate-700 hover:text-slate-900'
+                }`}
+              >
+                Médio · PL.AL.060
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {canAccessAdminPanel && (
+                <button
+                  type="button"
+                  onClick={() => navigateTo(activeTab === 'admin' ? 'dashboard' : 'admin')}
+                  className={`min-h-[38px] px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 border ${
+                    activeTab === 'admin'
+                      ? 'bg-[#0B3321] text-white border-[#0B3321]'
+                      : 'bg-emerald-50 text-[#0B3321] border-emerald-200 hover:bg-emerald-100'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline">
+                    {activeTab === 'admin' ? 'Visão Estudante' : 'Ambiente Admin'}
+                  </span>
+                  <span className="sm:hidden">Admin</span>
+                </button>
+              )}
+              <ShareAppButton variant="header" />
+              <PWAInstallButton variant="header" />
+              {isGuest && !user ? (
+                <button
+                  type="button"
+                  onClick={exitGuestMode}
+                  title="Fazer Login para sincronizar seus estudos na nuvem"
+                  className="min-h-[38px] px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold text-white bg-[#0B3321] hover:bg-[#134b32] rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                >
+                  <LogIn className="w-3.5 h-3.5 shrink-0" />
+                  <span className="sm:hidden">Login</span>
+                  <span className="hidden sm:inline">Fazer Login</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => navigateTo('settings')}
+                  title={`Perfil e configurações (${profile?.displayName || user?.email || 'Estudante'})`}
+                  className="min-h-[38px] px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-[#0B3321] bg-[#E8F3EC] hover:bg-emerald-100 border border-emerald-200 rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                >
+                  <UserCheck className="w-3.5 h-3.5 shrink-0 text-[#146C43]" />
+                  <span className="hidden sm:inline max-w-[110px] truncate">
+                    {profile?.displayName?.split(' ')[0] || 'Conta'}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content Area */}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-7 pb-24 lg:pb-12 space-y-5 sm:space-y-6 min-w-0">
+          {activeTab !== 'dashboard' && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-slate-600">
+              <div className="flex items-center gap-2 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => navigateTo('dashboard')}
+                  className="min-h-[38px] px-2.5 py-1 -ml-1 rounded-lg font-semibold text-[#0B3321] hover:bg-emerald-50 inline-flex items-center gap-1 shrink-0"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span className="sm:hidden">Início</span>
+                  <span className="hidden sm:inline">Painel do Estudante</span>
+                </button>
+                <span aria-hidden="true" className="text-slate-400">
+                  /
+                </span>
+                <span className="text-slate-900 font-semibold truncate">{activeSectionLabel}</span>
+              </div>
+
+              {/* Mobile Campus Switcher when inside inner view */}
+              <div className="flex md:hidden items-center gap-1 p-0.5 bg-slate-200/70 rounded-xl w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => handleChangeCampus('superior')}
+                  className={`flex-1 min-h-[36px] px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors truncate ${
+                    selectedCampus === 'superior' ? 'bg-[#0B3321] text-white' : 'text-slate-700'
+                  }`}
+                >
+                  Superior (PL.AL.102)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChangeCampus('medio')}
+                  className={`flex-1 min-h-[36px] px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors truncate ${
+                    selectedCampus === 'medio' ? 'bg-[#0B3321] text-white' : 'text-slate-700'
+                  }`}
+                >
+                  Médio (PL.AL.060)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeAlertMessage && (
+            <div
+              role="status"
+              className="bg-[#E8F3EC] border border-emerald-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            >
+              <div className="flex items-start gap-3">
+                <Bell className="w-5 h-5 text-[#146C43] shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Alerta de Estudos · Concurso ALEPA 2026</p>
+                  <p className="text-xs text-slate-700 mt-0.5">{activeAlertMessage}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    dismissAlert();
+                    navigateTo('schedule');
+                  }}
+                  className="min-h-[40px] px-3.5 py-1.5 bg-[#0B3321] text-white text-xs font-semibold rounded-xl"
+                >
+                  Iniciar estudos
+                </button>
+                <button
+                  type="button"
+                  onClick={dismissAlert}
+                  className="min-h-[40px] px-3 py-1.5 bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded-xl"
+                >
+                  Dispensar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isGuest && !user && (
+            <div
+              role="status"
+              className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            >
+              <div className="text-xs text-slate-700">
+                <strong className="text-slate-900">Modo Visitante ativo:</strong> seu progresso, simulados e revisões
+                ficam salvos localmente neste navegador. Para sincronizar entre celular e computador, entre com sua
+                conta Google quando quiser.
+              </div>
+              <button
+                type="button"
+                onClick={exitGuestMode}
+                className="min-h-[42px] px-3.5 py-1.5 text-xs font-semibold bg-[#0B3321] hover:bg-[#134b32] text-white rounded-xl inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Fazer login / Nuvem</span>
+              </button>
+            </div>
+          )}
+
+          {syncError && (
+            <div
+              role="alert"
+              className="bg-red-50 border border-red-200 text-red-900 rounded-xl px-4 py-3 text-sm flex items-center justify-between gap-4"
+            >
+              <span>{syncError}</span>
+              <button type="button" onClick={clearSyncError} className="text-xs font-semibold underline shrink-0">
+                Fechar
+              </button>
+            </div>
+          )}
+
+          <Suspense fallback={<RouteLoadingFallback />}>
+            {activeTab === 'dashboard' && (
+              <DashboardView
+                campus={selectedCampus}
+                onChangeCampus={handleChangeCampus}
+                medioCargoGroup={selectedMedioCargo}
+                onChangeMedioCargoGroup={handleChangeMedioCargo}
+                onNavigate={navigateTo}
+                onOpenContent={(scope) => {
+                  setContentInitialScope(scope);
+                  navigateTo('materials');
+                }}
+                onOpenStudyRoom={handleOpenStudyRoom}
+                onStartFocusTimer={handleStartFocusTimer}
+                alertSettings={alertSettings}
+              />
+            )}
+            {activeTab === 'preparation' && (
+              <PreparationView
+                campus={selectedCampus}
+                onChangeCampus={handleChangeCampus}
+                medioCargoGroup={selectedMedioCargo}
+                onChangeMedioCargoGroup={handleChangeMedioCargo}
+                onNavigate={navigateTo}
+                onOpenStudyRoom={handleOpenStudyRoom}
+              />
+            )}
+            {activeTab === 'disciplines' && (
+              <DisciplinesView
+                campus={selectedCampus}
+                onChangeCampus={handleChangeCampus}
+                medioCargoGroup={selectedMedioCargo}
+                onChangeMedioCargoGroup={handleChangeMedioCargo}
+                onOpenStudyRoom={handleOpenStudyRoom}
+              />
+            )}
+            {activeTab === 'study_room' && (
+              <StudyRoomView
+                campus={selectedCampus}
+                medioCargoGroup={selectedMedioCargo}
+                selectedDisciplineId={studyRoomTarget.disciplineId}
+                selectedTopicId={studyRoomTarget.topicId}
+                onSelectTopic={(disciplineId, topicId) => setStudyRoomTarget({ disciplineId, topicId })}
+                onNavigate={navigateTo}
+                onStartFocusTimer={handleStartFocusTimer}
+              />
+            )}
+            {activeTab === 'schedule' && (
+              <ScheduleView
+                campus={selectedCampus}
+                medioCargoGroup={selectedMedioCargo}
+                initialDisciplineId={timerPreset.disciplineId}
+                initialTopicTitle={timerPreset.topicTitle}
+                alertSettings={alertSettings}
+                onUpdateAlertSettings={updateAlertSettings}
+                notificationPermission={notificationPermission}
+                onRequestNotificationPermission={requestNotificationPermission}
+                onTestAlert={() => fireStudyAlert(undefined, true)}
+              />
+            )}
+            {activeTab === 'simulados' && (
+              <SimuladosView campus={selectedCampus} medioCargoGroup={selectedMedioCargo} />
+            )}
+            {activeTab === 'revisions' && <ErrorNotebookView campus={selectedCampus} />}
+            {activeTab === 'podcasts' && <PodcastsView campus={selectedCampus} />}
+            {activeTab === 'videos' && (
+              <VideosView
+                campus={selectedCampus}
+                onSummarizeWithGemini={(target) => {
+                  setGeminiPreset(target);
+                  navigateTo('gemini');
+                }}
+              />
+            )}
+            {activeTab === 'gemini' && (
+              <GeminiSummaryView
+                campus={selectedCampus}
+                presetTarget={geminiPreset}
+                onClearPreset={() => setGeminiPreset(null)}
+              />
+            )}
+            {activeTab === 'materials' && (
+              <MaterialsView
+                campus={selectedCampus}
+                initialScope={contentInitialScope}
+                onChangeCampus={handleChangeCampus}
+                onSummarizeWithGemini={(target) => {
+                  setGeminiPreset(target);
+                  navigateTo('gemini');
+                }}
+              />
+            )}
+            {activeTab === 'performance' && (
+              <PerformanceView campus={selectedCampus} medioCargoGroup={selectedMedioCargo} />
+            )}
+            {activeTab === 'family' && (
+              <FamilyAccessView
+                campus={selectedCampus}
+                onNavigate={navigateTo}
+                onOpenContent={(scope) => {
+                  setContentInitialScope(scope);
+                  navigateTo('materials');
+                }}
+              />
+            )}
+            {activeTab === 'settings' && (
+              <SettingsView
+                campus={selectedCampus}
+                onChangeCampus={handleChangeCampus}
+                onNavigate={navigateTo}
+              />
+            )}
+            {activeTab === 'admin' && canAccessAdminPanel && (
+              <AdminConsoleView
+                campus={selectedCampus}
+                onChangeCampus={handleChangeCampus}
+                medioCargoGroup={selectedMedioCargo}
+                onOpenStudentPreview={(section) => navigateTo(section)}
+              />
+            )}
+          </Suspense>
+        </main>
+      </div>
+
+      {/* Mobile & Tablet Portrait Slide-Up Bottom Sheet Menu */}
+      {mobileMenuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu completo mobile"
+        >
+          <button
+            type="button"
+            aria-label="Fechar menu"
+            onClick={() => setMobileMenuOpen(false)}
+            className="absolute inset-0 bg-slate-950/50 backdrop-blur-xs"
+          />
+
+          <div className="relative bg-white rounded-t-3xl border-t border-slate-200 shadow-2xl px-4 pt-3 pb-6 pb-safe max-h-[88vh] overflow-y-auto space-y-4">
+            <div className="w-10 h-1.5 rounded-full bg-slate-300 mx-auto" />
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold text-[#146C43]">Navegação Completa</p>
+                <h2 className="font-display text-lg font-bold text-slate-900">Meu Campus ALEPA 2026</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label="Fechar"
+                className="min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Campus Switcher inside Drawer */}
+            <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+              <p className="text-[11px] font-semibold text-slate-600 px-1">Campus ativo:</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleChangeCampus('superior')}
+                  className={`min-h-[44px] px-3 py-2 rounded-xl text-left text-xs font-semibold transition-colors flex items-center gap-2 ${
+                    selectedCampus === 'superior'
+                      ? 'bg-[#0B3321] text-white'
+                      : 'bg-white border border-slate-200 text-slate-800'
+                  }`}
+                >
+                  <GraduationCap className="w-4 h-4 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="truncate">Nível Superior</p>
+                    <p
+                      className={`text-[10px] font-mono ${
+                        selectedCampus === 'superior' ? 'text-emerald-200' : 'text-slate-500'
+                      }`}
+                    >
+                      PL.AL.102
+                    </p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChangeCampus('medio')}
+                  className={`min-h-[44px] px-3 py-2 rounded-xl text-left text-xs font-semibold transition-colors flex items-center gap-2 ${
+                    selectedCampus === 'medio'
+                      ? 'bg-[#0B3321] text-white'
+                      : 'bg-white border border-slate-200 text-slate-800'
+                  }`}
+                >
+                  <Layers className="w-4 h-4 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="truncate">Nível Médio</p>
+                    <p
+                      className={`text-[10px] font-mono ${
+                        selectedCampus === 'medio' ? 'text-emerald-200' : 'text-slate-500'
+                      }`}
+                    >
+                      PL.AL.060
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* All remaining sections as thumb-friendly tiles */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {canAccessAdminPanel && (
+                <button
+                  type="button"
+                  onClick={() => navigateTo('admin')}
+                  className={`min-h-[58px] p-3 rounded-2xl border text-left transition-transform active:scale-[0.98] flex items-start gap-2.5 ${
+                    activeTab === 'admin'
+                      ? 'border-[#0B3321] bg-[#E8F3EC] text-[#0B3321]'
+                      : 'border-emerald-200 bg-emerald-50/80 hover:bg-emerald-100 text-[#0B3321]'
+                  }`}
+                >
+                  <div className="w-8 h-8 rounded-xl bg-[#0B3321] text-white flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold truncate">Painel Admin</p>
+                    <p className="text-[11px] text-emerald-800 truncate mt-0.5">{formatRoleLabel(effectiveRole)}</p>
+                  </div>
+                </button>
+              )}
+
+              {mobileSheetItems.map((item) => {
+                const Icon = item.icon;
+                const active = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => navigateTo(item.id)}
+                    className={`min-h-[58px] p-3 rounded-2xl border text-left transition-transform active:scale-[0.98] flex items-start gap-2.5 ${
+                      active
+                        ? 'border-[#0B3321] bg-[#E8F3EC] text-[#0B3321]'
+                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-900'
+                    }`}
+                  >
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                        active ? 'bg-[#0B3321] text-white' : 'bg-[#E8F3EC] text-[#146C43]'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold truncate">{item.label}</p>
+                      <p className="text-[11px] text-slate-500 truncate mt-0.5">{item.subtitle}</p>
+                    </div>
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setContentInitialScope('geral');
+                  navigateTo('materials');
+                }}
+                className="min-h-[58px] p-3 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-left transition-transform active:scale-[0.98] flex items-start gap-2.5"
+              >
+                <div className="w-8 h-8 rounded-xl bg-[#E8F3EC] text-[#146C43] flex items-center justify-center shrink-0">
+                  <ChevronRight className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-slate-900 truncate">Aba Geral</p>
+                  <p className="text-[11px] text-slate-500 truncate mt-0.5">Matérias comuns</p>
+                </div>
+              </button>
+            </div>
+
+            {/* Account & Login Card in Mobile Drawer */}
+            <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-[#0B3321] text-white flex items-center justify-center shrink-0">
+                  {isGuest && !user ? <LogIn className="w-4 h-4" /> : <UserCheck className="w-4 h-4 text-emerald-300" />}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-900 truncate">
+                    {isGuest && !user ? 'Modo Visitante' : profile?.displayName || 'Conectado'}
+                  </p>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    {isGuest && !user ? 'Entre para salvar na nuvem' : user?.email || 'Sincronização ativa'}
+                  </p>
+                </div>
+              </div>
+
+              {isGuest && !user ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    exitGuestMode();
+                  }}
+                  className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[#0B3321] hover:bg-[#134b32] text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Fazer Login</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    void logout();
+                  }}
+                  className="min-h-[44px] px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:border-[#0B3321] text-slate-900 text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                >
+                  <LogOut className="w-3.5 h-3.5 text-[#146C43]" />
+                  <span>Sair / Trocar</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile & Tablet Portrait Bottom Tab Bar (5 ergonomic tabs >= 48px in thumb zone) */}
+      <nav
+        aria-label="Navegação inferior mobile"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 grid grid-cols-5 items-center h-16 pb-safe"
+      >
+        {primaryMobileTabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => navigateTo(tab.id)}
+              className={`relative flex flex-col items-center justify-center min-h-[48px] px-1 transition-transform active:scale-95 ${
+                isActive ? 'text-[#0B3321] font-semibold' : 'text-slate-500'
+              }`}
+            >
+              {isActive && <span className="absolute top-0 w-7 h-0.5 rounded-full bg-[#0B3321]" />}
+              <Icon className="w-5 h-5" />
+              <span className="text-[11px] tracking-tight mt-1 whitespace-nowrap">{tab.label}</span>
+            </button>
+          );
+        })}
+
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen(true)}
+          aria-expanded={mobileMenuOpen}
+          className={`relative flex flex-col items-center justify-center min-h-[48px] px-1 transition-transform active:scale-95 ${
+            mobileMenuOpen || isMoreTabActive ? 'text-[#0B3321] font-semibold' : 'text-slate-500'
+          }`}
+        >
+          {(mobileMenuOpen || isMoreTabActive) && (
+            <span className="absolute top-0 w-7 h-0.5 rounded-full bg-[#0B3321]" />
+          )}
+          <LayoutGrid className="w-5 h-5" />
+          <span className="text-[11px] tracking-tight mt-1 whitespace-nowrap">Mais</span>
+        </button>
+      </nav>
+      <OfflineIndicator />
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <CampusShell />
+    </AuthProvider>
+  );
+}
