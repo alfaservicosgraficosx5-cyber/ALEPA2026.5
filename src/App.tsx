@@ -80,15 +80,21 @@ const FamilyAccessView = lazy(() =>
 const SettingsView = lazy(() =>
   import('./components/SettingsView').then((m) => ({ default: m.SettingsView }))
 );
+const StudentClassroomView = lazy(() =>
+  import('./components/StudentClassroomView').then((m) => ({ default: m.StudentClassroomView }))
+);
+const TeacherConsoleView = lazy(() =>
+  import('./components/TeacherConsoleView').then((m) => ({ default: m.TeacherConsoleView }))
+);
 const AdminConsoleView = lazy(() =>
   import('./components/AdminConsoleView').then((m) => ({ default: m.AdminConsoleView }))
 );
 
 function RouteLoadingFallback() {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 min-h-[240px]">
-      <Loader2 className="w-6 h-6 animate-spin text-[#146C43]" />
-      <p className="text-xs font-medium text-slate-600">Carregando módulo de estudo...</p>
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 min-h-[240px]">
+      <Loader2 className="w-6 h-6 animate-spin text-[#146C43] dark:text-emerald-400" />
+      <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Carregando módulo de estudo...</p>
     </div>
   );
 }
@@ -107,6 +113,7 @@ const SIDEBAR_GROUPS: SidebarNavGroup[] = [
     groupLabel: 'Aprender',
     items: [
       { id: 'dashboard', label: 'Painel Inicial', icon: Home },
+      { id: 'classroom', label: 'Minhas Turmas & Aulas', icon: GraduationCap },
       { id: 'preparation', label: 'Minha Preparação', icon: Compass },
       { id: 'disciplines', label: 'Disciplinas e Edital', icon: BookOpen },
       { id: 'study_room', label: 'Sala de Estudo', icon: BookMarked },
@@ -150,8 +157,12 @@ function CampusShell() {
     studySessions,
     updateAccessPresenceContext,
     canAccessAdminPanel,
+    canAccessTeacherPanel,
     effectiveRole,
+    activeWorkspaceMode,
     setActiveWorkspaceMode,
+    preferences,
+    updateStudentPreferences,
   } = useAuth();
 
   const [activeTab, setActiveTab] = useState<NavSection>(() => {
@@ -211,7 +222,33 @@ function CampusShell() {
       setActiveTab('dashboard');
       setActiveWorkspaceMode('student');
     }
-  }, [canAccessAdminPanel, activeTab, setActiveWorkspaceMode]);
+    if (!canAccessTeacherPanel && activeTab === 'teacher') {
+      setActiveTab('dashboard');
+      setActiveWorkspaceMode('student');
+    }
+  }, [canAccessAdminPanel, canAccessTeacherPanel, activeTab, setActiveWorkspaceMode]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const applyTheme = () => {
+      const prefersDark =
+        typeof window !== 'undefined' &&
+        window.matchMedia &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const isDark = preferences.theme === 'dark' || (preferences.theme === 'auto' && prefersDark);
+      root.classList.toggle('dark', isDark);
+      root.dataset.accent = preferences.accentColor;
+      root.dataset.fontScale = preferences.fontScale;
+      root.dataset.density = preferences.density;
+    };
+    applyTheme();
+    if (preferences.theme === 'auto' && window.matchMedia) {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      mq.addEventListener('change', applyTheme);
+      return () => mq.removeEventListener('change', applyTheme);
+    }
+    return undefined;
+  }, [preferences.theme, preferences.accentColor, preferences.fontScale, preferences.density]);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -260,11 +297,11 @@ function CampusShell() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#F5F7F6] flex items-center justify-center p-6">
+      <div className="min-h-screen bg-[#F5F7F6] dark:bg-slate-950 flex items-center justify-center p-6">
         <div className="text-center space-y-2">
-          <Loader2 className="w-7 h-7 animate-spin text-[#0B3321] mx-auto" />
-          <p className="font-display text-xl font-bold text-slate-900">Meu Campus ALEPA 2026</p>
-          <p className="text-sm text-slate-500">Carregando área de estudos...</p>
+          <Loader2 className="w-7 h-7 animate-spin text-[#0B3321] dark:text-emerald-400 mx-auto" />
+          <p className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">Meu Campus ALEPA 2026</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Carregando área de estudos...</p>
         </div>
       </div>
     );
@@ -297,6 +334,12 @@ function CampusShell() {
     subtitle: string;
     icon: React.ComponentType<{ className?: string }>;
   }> = [
+    {
+      id: 'classroom',
+      label: 'Minhas Turmas',
+      subtitle: 'Aulas, atividades e notas',
+      icon: GraduationCap,
+    },
     {
       id: 'preparation',
       label: 'Minha Preparação',
@@ -362,33 +405,37 @@ function CampusShell() {
   const activeSectionLabel =
     activeTab === 'admin'
       ? 'Painel Administrativo'
-      : activeTab === 'preparation'
-      ? 'Minha Preparação'
-      : activeTab === 'study_room'
-        ? 'Sala de Estudo'
-        : activeTab === 'disciplines'
-          ? 'Disciplinas & Edital'
-          : activeTab === 'schedule'
-            ? 'Cronograma 2h'
-            : activeTab === 'simulados'
-              ? 'Simulados e Questões'
-              : activeTab === 'revisions'
-                ? 'Revisões / Erros'
-                : activeTab === 'podcasts'
-                  ? 'Podcasts & Spotify'
-                  : activeTab === 'videos'
-                    ? 'Videoaulas'
-                    : activeTab === 'gemini'
-                      ? 'Professor IA & Resumos'
-                      : activeTab === 'materials'
-                        ? 'Central de Estudos'
-                        : activeTab === 'performance'
-                          ? 'Desempenho'
-                          : activeTab === 'family'
-                            ? 'Familiares'
-                            : activeTab === 'settings'
-                              ? 'Configurações'
-                              : 'Painel Inicial';
+      : activeTab === 'teacher'
+        ? 'Console do Professor'
+        : activeTab === 'classroom'
+          ? 'Minhas Turmas & Aulas'
+          : activeTab === 'preparation'
+            ? 'Minha Preparação'
+            : activeTab === 'study_room'
+              ? 'Sala de Estudo'
+              : activeTab === 'disciplines'
+                ? 'Disciplinas & Edital'
+                : activeTab === 'schedule'
+                  ? 'Cronograma 2h'
+                  : activeTab === 'simulados'
+                    ? 'Simulados e Questões'
+                    : activeTab === 'revisions'
+                      ? 'Revisões / Erros'
+                      : activeTab === 'podcasts'
+                        ? 'Podcasts & Spotify'
+                        : activeTab === 'videos'
+                          ? 'Videoaulas'
+                          : activeTab === 'gemini'
+                            ? 'Professor IA & Resumos'
+                            : activeTab === 'materials'
+                              ? 'Central de Estudos'
+                              : activeTab === 'performance'
+                                ? 'Desempenho'
+                                : activeTab === 'family'
+                                  ? 'Familiares'
+                                  : activeTab === 'settings'
+                                    ? 'Configurações'
+                                    : 'Painel Inicial';
 
   const handleStartFocusTimer = (disciplineId: string, topicTitle: string) => {
     setTimerPreset({ disciplineId, topicTitle });
@@ -399,8 +446,13 @@ function CampusShell() {
     if (section === 'admin' && !canAccessAdminPanel) {
       return;
     }
+    if (section === 'teacher' && !canAccessTeacherPanel) {
+      return;
+    }
     setActiveTab(section);
-    setActiveWorkspaceMode(section === 'admin' ? 'admin' : 'student');
+    setActiveWorkspaceMode(
+      section === 'admin' ? 'admin' : section === 'teacher' ? 'teacher' : 'student'
+    );
     setMobileMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -411,23 +463,25 @@ function CampusShell() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F7F6] text-[#1E293B] flex overflow-x-hidden max-w-full">
+    <div className="min-h-screen bg-[#F5F7F6] dark:bg-slate-950 text-[#1E293B] dark:text-slate-100 flex overflow-x-hidden max-w-full">
       {/* Structured Desktop Sidebar (visible at lg >= 1024px) */}
       <aside
         aria-label="Menu principal lateral"
-        className={`hidden lg:flex flex-col shrink-0 bg-white border-r border-slate-200/90 sticky top-0 h-screen transition-all duration-200 ${
+        className={`hidden lg:flex flex-col shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200/90 dark:border-slate-800 sticky top-0 h-screen transition-all duration-200 ${
           sidebarCollapsed ? 'w-20' : 'w-64'
         }`}
       >
-        <div className="h-16 px-4 border-b border-slate-200/80 flex items-center justify-between gap-2">
+        <div className="h-16 px-4 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2">
           {!sidebarCollapsed && (
             <button
               type="button"
               onClick={() => navigateTo('dashboard')}
               className="text-left min-w-0"
             >
-              <p className="font-display text-sm font-bold text-[#0B3321] truncate">Meu Campus ALEPA</p>
-              <p className="text-[11px] font-mono text-slate-500 truncate">
+              <p className="font-display text-sm font-bold text-[#0B3321] dark:text-emerald-300 truncate">
+                Meu Campus ALEPA
+              </p>
+              <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
                 2026 · {selectedCampus === 'medio' ? 'Médio (PL.AL.060)' : 'Superior (PL.AL.102)'}
               </p>
             </button>
@@ -437,48 +491,78 @@ function CampusShell() {
             onClick={() => setSidebarCollapsed((c) => !c)}
             aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
             title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
-            className="min-w-[38px] min-h-[38px] rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 mx-auto"
+            className="min-w-[38px] min-h-[38px] rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0 mx-auto"
           >
             <Menu className="w-4 h-4" />
           </button>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2.5 py-4 space-y-5">
-          {canAccessAdminPanel && (
+          {(canAccessTeacherPanel || canAccessAdminPanel) && (
             <div className="space-y-1">
               {!sidebarCollapsed && (
-                <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                  Gestão ({formatRoleLabel(effectiveRole)})
+                <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                  Ambientes ({formatRoleLabel(effectiveRole)})
                 </p>
               )}
               <button
                 type="button"
-                onClick={() => navigateTo(activeTab === 'admin' ? 'dashboard' : 'admin')}
-                title="Painel Administrativo / Editor"
-                className={`w-full min-h-[40px] px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-colors ${
+                onClick={() => navigateTo('dashboard')}
+                title="Ambiente do Estudante"
+                className={`w-full min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-colors ${
                   sidebarCollapsed ? 'justify-center px-0' : ''
                 } ${
-                  activeTab === 'admin'
-                    ? 'bg-[#0B3321] text-white shadow-2xs'
-                    : 'bg-emerald-50 text-[#0B3321] border border-emerald-200 hover:bg-emerald-100'
+                  activeWorkspaceMode === 'student'
+                    ? 'bg-[#0B3321] text-white'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
-                <ShieldCheck
-                  className={`w-4 h-4 shrink-0 ${activeTab === 'admin' ? 'text-emerald-300' : 'text-[#146C43]'}`}
-                />
-                {!sidebarCollapsed && (
-                  <span className="truncate">
-                    {activeTab === 'admin' ? 'Ambiente Admin (Ativo)' : 'Painel Admin / Editor'}
-                  </span>
-                )}
+                <GraduationCap className="w-4 h-4 shrink-0" />
+                {!sidebarCollapsed && <span className="truncate">Ambiente Estudante</span>}
               </button>
+
+              {canAccessTeacherPanel && (
+                <button
+                  type="button"
+                  onClick={() => navigateTo('teacher')}
+                  title="Ambiente do Professor"
+                  className={`w-full min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-colors ${
+                    sidebarCollapsed ? 'justify-center px-0' : ''
+                  } ${
+                    activeTab === 'teacher'
+                      ? 'bg-[#0B3321] text-white'
+                      : 'bg-emerald-50 dark:bg-emerald-950/50 text-[#0B3321] dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span className="truncate">Ambiente Professor</span>}
+                </button>
+              )}
+
+              {canAccessAdminPanel && (
+                <button
+                  type="button"
+                  onClick={() => navigateTo('admin')}
+                  title="Ambiente Administrativo / Editor"
+                  className={`w-full min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-colors ${
+                    sidebarCollapsed ? 'justify-center px-0' : ''
+                  } ${
+                    activeTab === 'admin'
+                      ? 'bg-[#0B3321] text-white'
+                      : 'bg-emerald-50 dark:bg-emerald-950/50 text-[#0B3321] dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span className="truncate">Ambiente Admin</span>}
+                </button>
+              )}
             </div>
           )}
 
           {SIDEBAR_GROUPS.map((group) => (
             <div key={group.groupLabel} className="space-y-1">
               {!sidebarCollapsed && (
-                <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   {group.groupLabel}
                 </p>
               )}
@@ -496,11 +580,11 @@ function CampusShell() {
                     } ${
                       active
                         ? 'bg-[#0B3321] text-white shadow-2xs'
-                        : 'text-slate-700 hover:bg-[#E8F3EC] hover:text-[#0B3321]'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-[#E8F3EC] dark:hover:bg-slate-800 hover:text-[#0B3321] dark:hover:text-emerald-300'
                     }`}
                   >
                     <Icon
-                      className={`w-4 h-4 shrink-0 ${active ? 'text-emerald-300' : 'text-[#146C43]'}`}
+                      className={`w-4 h-4 shrink-0 ${active ? 'text-emerald-300' : 'text-[#146C43] dark:text-emerald-400'}`}
                     />
                     {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
                   </button>
@@ -511,7 +595,7 @@ function CampusShell() {
         </nav>
 
         {/* Sidebar Footer: Account Status */}
-        <div className="p-3 border-t border-slate-200/80">
+        <div className="p-3 border-t border-slate-200/80 dark:border-slate-800">
           {isGuest && !user ? (
             <button
               type="button"
@@ -530,14 +614,14 @@ function CampusShell() {
                   onClick={() => navigateTo('settings')}
                   className="flex items-center gap-2 min-w-0 text-left hover:opacity-80"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-[#E8F3EC] text-[#0B3321] flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-300 flex items-center justify-center shrink-0">
                     <UserCheck className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-900 truncate">
+                    <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
                       {profile?.displayName?.split(' ')[0] || 'Estudante'}
                     </p>
-                    <p className="text-[10px] text-[#146C43] truncate">Nuvem ativa</p>
+                    <p className="text-[10px] text-[#146C43] dark:text-emerald-400 truncate">Nuvem ativa</p>
                   </div>
                 </button>
               )}
@@ -546,7 +630,7 @@ function CampusShell() {
                 onClick={logout}
                 aria-label="Sair da conta"
                 title="Sair / Trocar conta"
-                className="min-w-[36px] min-h-[36px] rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 mx-auto"
+                className="min-w-[36px] min-h-[36px] rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0 mx-auto"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -558,15 +642,14 @@ function CampusShell() {
       {/* Main Column */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Top Bar (Compact on Mobile/Tablet, Slim Utility Bar on Desktop) */}
-        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200">
+        <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
             <div className="flex items-center gap-2 min-w-0">
-              {/* Mobile/Tablet Menu Drawer Button (quick access from header as well as Bottom Bar) */}
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(true)}
                 aria-label="Abrir menu completo"
-                className="lg:hidden min-w-[40px] min-h-[40px] -ml-1 rounded-xl hover:bg-slate-100 text-slate-700 flex items-center justify-center shrink-0"
+                className="lg:hidden min-w-[40px] min-h-[40px] -ml-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center shrink-0"
               >
                 <Menu className="w-5 h-5" />
               </button>
@@ -574,25 +657,25 @@ function CampusShell() {
               <button
                 type="button"
                 onClick={() => navigateTo('dashboard')}
-                className="font-display text-sm sm:text-base font-bold tracking-tight text-slate-900 whitespace-nowrap truncate text-left flex items-center gap-2 min-h-[40px]"
+                className="font-display text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap truncate text-left flex items-center gap-2 min-h-[40px]"
               >
                 <span className="lg:hidden">ALEPA 2026</span>
-                <span className="hidden lg:inline text-slate-500 font-medium text-xs">
-                  Meu Campus ALEPA / <strong className="text-slate-900 font-semibold">{activeSectionLabel}</strong>
-                </span>
-                <span className="lg:hidden text-[10px] font-mono font-semibold text-[#146C43] bg-[#E8F3EC] border border-emerald-200 px-1.5 py-0.5 rounded-md">
-                  {selectedCampus === 'medio' ? 'Médio' : 'Superior'}
+                <span className="hidden lg:inline text-slate-500 dark:text-slate-400 font-medium text-xs">
+                  Meu Campus ALEPA /{' '}
+                  <strong className="text-slate-900 dark:text-slate-100 font-semibold">{activeSectionLabel}</strong>
                 </span>
               </button>
             </div>
 
             {/* Campus Quick Switcher on Desktop Top Bar */}
-            <div className="hidden md:flex items-center gap-1 p-1 bg-slate-100 rounded-xl shrink-0">
+            <div className="hidden md:flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl shrink-0">
               <button
                 type="button"
                 onClick={() => handleChangeCampus('superior')}
                 className={`min-h-[34px] px-3 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
-                  selectedCampus === 'superior' ? 'bg-[#0B3321] text-white' : 'text-slate-700 hover:text-slate-900'
+                  selectedCampus === 'superior'
+                    ? 'bg-[#0B3321] text-white'
+                    : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 Superior · PL.AL.102
@@ -601,7 +684,9 @@ function CampusShell() {
                 type="button"
                 onClick={() => handleChangeCampus('medio')}
                 className={`min-h-[34px] px-3 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
-                  selectedCampus === 'medio' ? 'bg-[#0B3321] text-white' : 'text-slate-700 hover:text-slate-900'
+                  selectedCampus === 'medio'
+                    ? 'bg-[#0B3321] text-white'
+                    : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 Médio · PL.AL.060
@@ -609,23 +694,19 @@ function CampusShell() {
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {canAccessAdminPanel && (
-                <button
-                  type="button"
-                  onClick={() => navigateTo(activeTab === 'admin' ? 'dashboard' : 'admin')}
-                  className={`min-h-[38px] px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 border ${
-                    activeTab === 'admin'
-                      ? 'bg-[#0B3321] text-white border-[#0B3321]'
-                      : 'bg-emerald-50 text-[#0B3321] border-emerald-200 hover:bg-emerald-100'
-                  }`}
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                  <span className="hidden sm:inline">
-                    {activeTab === 'admin' ? 'Visão Estudante' : 'Ambiente Admin'}
-                  </span>
-                  <span className="sm:hidden">Admin</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() =>
+                  void updateStudentPreferences({
+                    theme: preferences.theme === 'dark' ? 'light' : 'dark',
+                  })
+                }
+                aria-label="Alternar tema claro/escuro"
+                title={preferences.theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+                className="min-w-[38px] min-h-[38px] px-2.5 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-[#146C43]"
+              >
+                {preferences.theme === 'dark' ? 'Claro' : 'Escuro'}
+              </button>
               <ShareAppButton variant="header" />
               <PWAInstallButton variant="header" />
               {isGuest && !user ? (
@@ -644,9 +725,9 @@ function CampusShell() {
                   type="button"
                   onClick={() => navigateTo('settings')}
                   title={`Perfil e configurações (${profile?.displayName || user?.email || 'Estudante'})`}
-                  className="min-h-[38px] px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-[#0B3321] bg-[#E8F3EC] hover:bg-emerald-100 border border-emerald-200 rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                  className="min-h-[38px] px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-[#0B3321] dark:text-emerald-200 bg-[#E8F3EC] dark:bg-emerald-950/60 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800 rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
                 >
-                  <UserCheck className="w-3.5 h-3.5 shrink-0 text-[#146C43]" />
+                  <UserCheck className="w-3.5 h-3.5 shrink-0 text-[#146C43] dark:text-emerald-400" />
                   <span className="hidden sm:inline max-w-[110px] truncate">
                     {profile?.displayName?.split(' ')[0] || 'Conta'}
                   </span>
@@ -659,12 +740,12 @@ function CampusShell() {
         {/* Main Content Area */}
         <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-7 pb-24 lg:pb-12 space-y-5 sm:space-y-6 min-w-0">
           {activeTab !== 'dashboard' && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-slate-600">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-slate-600 dark:text-slate-400">
               <div className="flex items-center gap-2 min-w-0">
                 <button
                   type="button"
                   onClick={() => navigateTo('dashboard')}
-                  className="min-h-[38px] px-2.5 py-1 -ml-1 rounded-lg font-semibold text-[#0B3321] hover:bg-emerald-50 inline-flex items-center gap-1 shrink-0"
+                  className="min-h-[38px] px-2.5 py-1 -ml-1 rounded-lg font-semibold text-[#0B3321] dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-slate-800 inline-flex items-center gap-1 shrink-0"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span className="sm:hidden">Início</span>
@@ -673,16 +754,16 @@ function CampusShell() {
                 <span aria-hidden="true" className="text-slate-400">
                   /
                 </span>
-                <span className="text-slate-900 font-semibold truncate">{activeSectionLabel}</span>
+                <span className="text-slate-900 dark:text-slate-100 font-semibold truncate">{activeSectionLabel}</span>
               </div>
 
               {/* Mobile Campus Switcher when inside inner view */}
-              <div className="flex md:hidden items-center gap-1 p-0.5 bg-slate-200/70 rounded-xl w-full sm:w-auto">
+              <div className="flex md:hidden items-center gap-1 p-0.5 bg-slate-200/70 dark:bg-slate-800 rounded-xl w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => handleChangeCampus('superior')}
                   className={`flex-1 min-h-[36px] px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors truncate ${
-                    selectedCampus === 'superior' ? 'bg-[#0B3321] text-white' : 'text-slate-700'
+                    selectedCampus === 'superior' ? 'bg-[#0B3321] text-white' : 'text-slate-700 dark:text-slate-300'
                   }`}
                 >
                   Superior (PL.AL.102)
@@ -691,7 +772,7 @@ function CampusShell() {
                   type="button"
                   onClick={() => handleChangeCampus('medio')}
                   className={`flex-1 min-h-[36px] px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors truncate ${
-                    selectedCampus === 'medio' ? 'bg-[#0B3321] text-white' : 'text-slate-700'
+                    selectedCampus === 'medio' ? 'bg-[#0B3321] text-white' : 'text-slate-700 dark:text-slate-300'
                   }`}
                 >
                   Médio (PL.AL.060)
@@ -700,16 +781,28 @@ function CampusShell() {
             </div>
           )}
 
+          {profile?.active === false && (
+            <div
+              role="alert"
+              className="bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-amber-950 dark:text-amber-200 rounded-2xl px-4 py-3 text-xs sm:text-sm font-medium"
+            >
+              Sua conta está temporariamente inativada para funções avançadas. Seus registros históricos permanecem
+              preservados; contate a administração para reativação.
+            </div>
+          )}
+
           {activeAlertMessage && (
             <div
               role="status"
-              className="bg-[#E8F3EC] border border-emerald-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+              className="bg-[#E8F3EC] dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
             >
               <div className="flex items-start gap-3">
-                <Bell className="w-5 h-5 text-[#146C43] shrink-0 mt-0.5" />
+                <Bell className="w-5 h-5 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Alerta de Estudos · Concurso ALEPA 2026</p>
-                  <p className="text-xs text-slate-700 mt-0.5">{activeAlertMessage}</p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Alerta de Estudos · Concurso ALEPA 2026
+                  </p>
+                  <p className="text-xs text-slate-700 dark:text-slate-300 mt-0.5">{activeAlertMessage}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -726,7 +819,7 @@ function CampusShell() {
                 <button
                   type="button"
                   onClick={dismissAlert}
-                  className="min-h-[40px] px-3 py-1.5 bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded-xl"
+                  className="min-h-[40px] px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium rounded-xl"
                 >
                   Dispensar
                 </button>
@@ -737,12 +830,12 @@ function CampusShell() {
           {isGuest && !user && (
             <div
               role="status"
-              className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
             >
-              <div className="text-xs text-slate-700">
-                <strong className="text-slate-900">Modo Visitante ativo:</strong> seu progresso, simulados e revisões
-                ficam salvos localmente neste navegador. Para sincronizar entre celular e computador, entre com sua
-                conta Google quando quiser.
+              <div className="text-xs text-slate-700 dark:text-slate-300">
+                <strong className="text-slate-900 dark:text-slate-100">Modo Visitante ativo:</strong> seu progresso,
+                simulados e revisões ficam salvos localmente neste navegador. Para sincronizar entre celular e
+                computador, entre com sua conta Google quando quiser.
               </div>
               <button
                 type="button"
@@ -758,7 +851,7 @@ function CampusShell() {
           {syncError && (
             <div
               role="alert"
-              className="bg-red-50 border border-red-200 text-red-900 rounded-xl px-4 py-3 text-sm flex items-center justify-between gap-4"
+              className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-900 dark:text-red-200 rounded-xl px-4 py-3 text-sm flex items-center justify-between gap-4"
             >
               <span>{syncError}</span>
               <button type="button" onClick={clearSyncError} className="text-xs font-semibold underline shrink-0">
@@ -872,11 +965,26 @@ function CampusShell() {
                 }}
               />
             )}
+            {activeTab === 'classroom' && (
+              <StudentClassroomView
+                campus={selectedCampus}
+                onSummarizeWithGemini={(target) => {
+                  setGeminiPreset(target);
+                  navigateTo('gemini');
+                }}
+              />
+            )}
             {activeTab === 'settings' && (
               <SettingsView
                 campus={selectedCampus}
                 onChangeCampus={handleChangeCampus}
                 onNavigate={navigateTo}
+              />
+            )}
+            {activeTab === 'teacher' && canAccessTeacherPanel && (
+              <TeacherConsoleView
+                campus={selectedCampus}
+                onOpenStudentPreview={() => navigateTo('dashboard')}
               />
             )}
             {activeTab === 'admin' && canAccessAdminPanel && (
@@ -906,27 +1014,29 @@ function CampusShell() {
             className="absolute inset-0 bg-slate-950/50 backdrop-blur-xs"
           />
 
-          <div className="relative bg-white rounded-t-3xl border-t border-slate-200 shadow-2xl px-4 pt-3 pb-6 pb-safe max-h-[88vh] overflow-y-auto space-y-4">
-            <div className="w-10 h-1.5 rounded-full bg-slate-300 mx-auto" />
+          <div className="relative bg-white dark:bg-slate-900 rounded-t-3xl border-t border-slate-200 dark:border-slate-800 shadow-2xl px-4 pt-3 pb-6 pb-safe max-h-[88vh] overflow-y-auto space-y-4">
+            <div className="w-10 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto" />
 
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold text-[#146C43]">Navegação Completa</p>
-                <h2 className="font-display text-lg font-bold text-slate-900">Meu Campus ALEPA 2026</h2>
+                <p className="text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">Navegação Completa</p>
+                <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
+                  Meu Campus ALEPA 2026
+                </h2>
               </div>
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(false)}
                 aria-label="Fechar"
-                className="min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center"
+                className="min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 flex items-center justify-center"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Quick Campus Switcher inside Drawer */}
-            <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-              <p className="text-[11px] font-semibold text-slate-600 px-1">Campus ativo:</p>
+            <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2">
+              <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 px-1">Campus ativo:</p>
               <div className="grid grid-cols-2 gap-1.5">
                 <button
                   type="button"
@@ -934,7 +1044,7 @@ function CampusShell() {
                   className={`min-h-[44px] px-3 py-2 rounded-xl text-left text-xs font-semibold transition-colors flex items-center gap-2 ${
                     selectedCampus === 'superior'
                       ? 'bg-[#0B3321] text-white'
-                      : 'bg-white border border-slate-200 text-slate-800'
+                      : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
                   }`}
                 >
                   <GraduationCap className="w-4 h-4 shrink-0" />
@@ -942,7 +1052,7 @@ function CampusShell() {
                     <p className="truncate">Nível Superior</p>
                     <p
                       className={`text-[10px] font-mono ${
-                        selectedCampus === 'superior' ? 'text-emerald-200' : 'text-slate-500'
+                        selectedCampus === 'superior' ? 'text-emerald-200' : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
                       PL.AL.102
@@ -955,7 +1065,7 @@ function CampusShell() {
                   className={`min-h-[44px] px-3 py-2 rounded-xl text-left text-xs font-semibold transition-colors flex items-center gap-2 ${
                     selectedCampus === 'medio'
                       ? 'bg-[#0B3321] text-white'
-                      : 'bg-white border border-slate-200 text-slate-800'
+                      : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
                   }`}
                 >
                   <Layers className="w-4 h-4 shrink-0" />
@@ -963,7 +1073,7 @@ function CampusShell() {
                     <p className="truncate">Nível Médio</p>
                     <p
                       className={`text-[10px] font-mono ${
-                        selectedCampus === 'medio' ? 'text-emerald-200' : 'text-slate-500'
+                        selectedCampus === 'medio' ? 'text-emerald-200' : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
                       PL.AL.060
@@ -975,14 +1085,34 @@ function CampusShell() {
 
             {/* All remaining sections as thumb-friendly tiles */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {canAccessTeacherPanel && (
+                <button
+                  type="button"
+                  onClick={() => navigateTo('teacher')}
+                  className={`min-h-[58px] p-3 rounded-2xl border text-left transition-transform active:scale-[0.98] flex items-start gap-2.5 ${
+                    activeTab === 'teacher'
+                      ? 'border-[#0B3321] bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-200'
+                      : 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-950/30 text-[#0B3321] dark:text-emerald-200'
+                  }`}
+                >
+                  <div className="w-8 h-8 rounded-xl bg-[#0B3321] text-white flex items-center justify-center shrink-0">
+                    <BookOpen className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold truncate">Professor</p>
+                    <p className="text-[11px] text-emerald-800 dark:text-emerald-300 truncate mt-0.5">Turmas e notas</p>
+                  </div>
+                </button>
+              )}
+
               {canAccessAdminPanel && (
                 <button
                   type="button"
                   onClick={() => navigateTo('admin')}
                   className={`min-h-[58px] p-3 rounded-2xl border text-left transition-transform active:scale-[0.98] flex items-start gap-2.5 ${
                     activeTab === 'admin'
-                      ? 'border-[#0B3321] bg-[#E8F3EC] text-[#0B3321]'
-                      : 'border-emerald-200 bg-emerald-50/80 hover:bg-emerald-100 text-[#0B3321]'
+                      ? 'border-[#0B3321] bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-200'
+                      : 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-950/30 text-[#0B3321] dark:text-emerald-200'
                   }`}
                 >
                   <div className="w-8 h-8 rounded-xl bg-[#0B3321] text-white flex items-center justify-center shrink-0">
@@ -990,7 +1120,9 @@ function CampusShell() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold truncate">Painel Admin</p>
-                    <p className="text-[11px] text-emerald-800 truncate mt-0.5">{formatRoleLabel(effectiveRole)}</p>
+                    <p className="text-[11px] text-emerald-800 dark:text-emerald-300 truncate mt-0.5">
+                      {formatRoleLabel(effectiveRole)}
+                    </p>
                   </div>
                 </button>
               )}
@@ -1005,20 +1137,22 @@ function CampusShell() {
                     onClick={() => navigateTo(item.id)}
                     className={`min-h-[58px] p-3 rounded-2xl border text-left transition-transform active:scale-[0.98] flex items-start gap-2.5 ${
                       active
-                        ? 'border-[#0B3321] bg-[#E8F3EC] text-[#0B3321]'
-                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-900'
+                        ? 'border-[#0B3321] bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-200'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-900 dark:text-slate-100'
                     }`}
                   >
                     <div
                       className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                        active ? 'bg-[#0B3321] text-white' : 'bg-[#E8F3EC] text-[#146C43]'
+                        active
+                          ? 'bg-[#0B3321] text-white'
+                          : 'bg-[#E8F3EC] dark:bg-emerald-950/50 text-[#146C43] dark:text-emerald-300'
                       }`}
                     >
                       <Icon className="w-4 h-4" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold truncate">{item.label}</p>
-                      <p className="text-[11px] text-slate-500 truncate mt-0.5">{item.subtitle}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">{item.subtitle}</p>
                     </div>
                   </button>
                 );
@@ -1030,29 +1164,29 @@ function CampusShell() {
                   setContentInitialScope('geral');
                   navigateTo('materials');
                 }}
-                className="min-h-[58px] p-3 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-left transition-transform active:scale-[0.98] flex items-start gap-2.5"
+                className="min-h-[58px] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-left transition-transform active:scale-[0.98] flex items-start gap-2.5"
               >
-                <div className="w-8 h-8 rounded-xl bg-[#E8F3EC] text-[#146C43] flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-xl bg-[#E8F3EC] dark:bg-emerald-950/50 text-[#146C43] dark:text-emerald-300 flex items-center justify-center shrink-0">
                   <ChevronRight className="w-4 h-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-slate-900 truncate">Aba Geral</p>
-                  <p className="text-[11px] text-slate-500 truncate mt-0.5">Matérias comuns</p>
+                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">Aba Geral</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">Matérias comuns</p>
                 </div>
               </button>
             </div>
 
             {/* Account & Login Card in Mobile Drawer */}
-            <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
+            <div className="p-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-9 h-9 rounded-xl bg-[#0B3321] text-white flex items-center justify-center shrink-0">
                   {isGuest && !user ? <LogIn className="w-4 h-4" /> : <UserCheck className="w-4 h-4 text-emerald-300" />}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-900 truncate">
+                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
                     {isGuest && !user ? 'Modo Visitante' : profile?.displayName || 'Conectado'}
                   </p>
-                  <p className="text-[11px] text-slate-500 truncate">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                     {isGuest && !user ? 'Entre para salvar na nuvem' : user?.email || 'Sincronização ativa'}
                   </p>
                 </div>
@@ -1077,9 +1211,9 @@ function CampusShell() {
                     setMobileMenuOpen(false);
                     void logout();
                   }}
-                  className="min-h-[44px] px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:border-[#0B3321] text-slate-900 text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                  className="min-h-[44px] px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:border-[#0B3321] text-slate-900 dark:text-slate-100 text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
                 >
-                  <LogOut className="w-3.5 h-3.5 text-[#146C43]" />
+                  <LogOut className="w-3.5 h-3.5 text-[#146C43] dark:text-emerald-400" />
                   <span>Sair / Trocar</span>
                 </button>
               )}
@@ -1091,7 +1225,7 @@ function CampusShell() {
       {/* Mobile & Tablet Portrait Bottom Tab Bar (5 ergonomic tabs >= 48px in thumb zone) */}
       <nav
         aria-label="Navegação inferior mobile"
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 grid grid-cols-5 items-center h-16 pb-safe"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 grid grid-cols-5 items-center h-16 pb-safe"
       >
         {primaryMobileTabs.map((tab) => {
           const Icon = tab.icon;
@@ -1102,10 +1236,12 @@ function CampusShell() {
               type="button"
               onClick={() => navigateTo(tab.id)}
               className={`relative flex flex-col items-center justify-center min-h-[48px] px-1 transition-transform active:scale-95 ${
-                isActive ? 'text-[#0B3321] font-semibold' : 'text-slate-500'
+                isActive ? 'text-[#0B3321] dark:text-emerald-300 font-semibold' : 'text-slate-500 dark:text-slate-400'
               }`}
             >
-              {isActive && <span className="absolute top-0 w-7 h-0.5 rounded-full bg-[#0B3321]" />}
+              {isActive && (
+                <span className="absolute top-0 w-7 h-0.5 rounded-full bg-[#0B3321] dark:bg-emerald-400" />
+              )}
               <Icon className="w-5 h-5" />
               <span className="text-[11px] tracking-tight mt-1 whitespace-nowrap">{tab.label}</span>
             </button>
@@ -1117,11 +1253,13 @@ function CampusShell() {
           onClick={() => setMobileMenuOpen(true)}
           aria-expanded={mobileMenuOpen}
           className={`relative flex flex-col items-center justify-center min-h-[48px] px-1 transition-transform active:scale-95 ${
-            mobileMenuOpen || isMoreTabActive ? 'text-[#0B3321] font-semibold' : 'text-slate-500'
+            mobileMenuOpen || isMoreTabActive
+              ? 'text-[#0B3321] dark:text-emerald-300 font-semibold'
+              : 'text-slate-500 dark:text-slate-400'
           }`}
         >
           {(mobileMenuOpen || isMoreTabActive) && (
-            <span className="absolute top-0 w-7 h-0.5 rounded-full bg-[#0B3321]" />
+            <span className="absolute top-0 w-7 h-0.5 rounded-full bg-[#0B3321] dark:bg-emerald-400" />
           )}
           <LayoutGrid className="w-5 h-5" />
           <span className="text-[11px] tracking-tight mt-1 whitespace-nowrap">Mais</span>

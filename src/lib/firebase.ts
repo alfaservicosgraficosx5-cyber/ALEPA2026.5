@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDocFromServer, initializeFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -10,6 +11,10 @@ export const db = initializeFirestore(
   firebaseConfig.firestoreDatabaseId
 );
 export const auth = getAuth(app);
+export const storage = getStorage(app);
+export const FIREBASE_PROJECT_ID = firebaseConfig.projectId;
+export const FIREBASE_STORAGE_BUCKET = firebaseConfig.storageBucket;
+export const FIREBASE_CONSOLE_STORAGE_URL = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/storage`;
 export const googleAuthProvider = new GoogleAuthProvider();
 export const workspaceAuthProvider = new GoogleAuthProvider();
 

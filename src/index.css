@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
@@ -32,9 +33,71 @@
   --bg-main: #F5F7F6;
   --bg-card: #FFFFFF;
   --bg-subtle: #F1F5F2;
+  --border-subtle: #E2E8F0;
   --text-main: #1E293B;
   --text-muted: #64748B;
   --text-disabled: #94A3B8;
+  --font-scale-factor: 1;
+}
+
+:root.dark {
+  --bg-main: #0B1210;
+  --bg-card: #121D1A;
+  --bg-subtle: #182722;
+  --border-subtle: #243731;
+  --text-main: #F1F5F9;
+  --text-muted: #94A3B8;
+  --text-disabled: #64748B;
+  --brand-soft: #143627;
+}
+
+:root[data-accent="indigo"] {
+  --brand-dark: #1E1B4B;
+  --brand-primary: #3730A3;
+  --brand-accent: #4F46E5;
+  --brand-soft: #EEF2FF;
+}
+
+:root.dark[data-accent="indigo"] {
+  --brand-soft: #1E1B4B;
+}
+
+:root[data-accent="amber"] {
+  --brand-dark: #451A03;
+  --brand-primary: #B45309;
+  --brand-accent: #D97706;
+  --brand-soft: #FEF3C7;
+}
+
+:root.dark[data-accent="amber"] {
+  --brand-soft: #3B2308;
+}
+
+:root[data-accent="teal"] {
+  --brand-dark: #134E4A;
+  --brand-primary: #0F766E;
+  --brand-accent: #0D9488;
+  --brand-soft: #CCFBF1;
+}
+
+:root.dark[data-accent="teal"] {
+  --brand-soft: #133B37;
+}
+
+:root[data-font-scale="sm"] {
+  font-size: 14px;
+}
+
+:root[data-font-scale="md"] {
+  font-size: 16px;
+}
+
+:root[data-font-scale="lg"] {
+  font-size: 18px;
+}
+
+:root[data-density="compact"] .campus-card {
+  padding: 0.875rem;
 }
 
 @layer base {
@@ -129,4 +192,3 @@
   background: rgba(20, 108, 67, 0.28);
   color: transparent;
 }
-

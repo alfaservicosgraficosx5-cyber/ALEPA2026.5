@@ -98,7 +98,7 @@ export function AuthView() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col lg:flex-row">
       {/* Left Institutional Column */}
       <div className="lg:w-1/2 bg-[#0B3321] text-white flex flex-col justify-between p-8 sm:p-12 lg:p-16 relative overflow-hidden">
         <div className="relative z-10 flex items-center gap-4">
@@ -178,17 +178,17 @@ export function AuthView() {
 
       {/* Right Authentication Form */}
       <div className="lg:w-1/2 flex items-center justify-center p-6 sm:p-12 lg:p-16">
-        <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm">
+        <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-sm">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="font-display text-2xl font-bold text-slate-900">
+              <h2 className="font-display text-2xl font-bold text-slate-900 dark:text-slate-100">
                 {mode === 'family'
                   ? 'Acesso por Familiares'
                   : mode === 'login'
                     ? 'Acessar Campus'
                     : 'Criar Conta'}
               </h2>
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                 {mode === 'family'
                   ? 'Entre com seu Google ou e-mail familiar para acessar os conteúdos compartilhados.'
                   : mode === 'login'
@@ -198,7 +198,7 @@ export function AuthView() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl mb-5">
+          <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-5">
             <button
               type="button"
               onClick={() => {
@@ -206,10 +206,10 @@ export function AuthView() {
                 setErrorMsg(null);
               }}
               className={`min-h-[42px] text-xs sm:text-sm font-medium rounded-lg transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap ${
-                mode === 'login' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                mode === 'login' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs font-semibold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              <LogIn className="w-3.5 h-3.5 text-[#146C43]" />
+              <LogIn className="w-3.5 h-3.5 text-[#146C43] dark:text-emerald-400" />
               <span>Entrar</span>
             </button>
             <button
@@ -219,7 +219,7 @@ export function AuthView() {
                 setErrorMsg(null);
               }}
               className={`min-h-[42px] text-xs sm:text-sm font-medium rounded-lg transition-colors inline-flex items-center justify-center gap-1 whitespace-nowrap ${
-                mode === 'family' ? 'bg-[#0B3321] text-white shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                mode === 'family' ? 'bg-[#0B3321] text-white shadow-xs font-semibold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               <Users className="w-3.5 h-3.5" />
@@ -232,32 +232,32 @@ export function AuthView() {
                 setErrorMsg(null);
               }}
               className={`min-h-[42px] text-xs sm:text-sm font-medium rounded-lg transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap ${
-                mode === 'register' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                mode === 'register' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs font-semibold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              <UserPlus className="w-3.5 h-3.5 text-[#146C43]" />
+              <UserPlus className="w-3.5 h-3.5 text-[#146C43] dark:text-emerald-400" />
               <span>Cadastrar</span>
             </button>
           </div>
 
           {mode === 'family' && (
-            <div className="mb-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2.5">
+            <div className="mb-4 p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 space-y-2.5">
               <div className="flex items-start gap-2.5">
-                <Users className="w-4 h-4 text-[#0B3321] shrink-0 mt-0.5" />
-                <div className="text-xs text-slate-700 leading-relaxed">
-                  <p className="font-bold text-[#0B3321]">Área de Ensino Compartilhada da Família</p>
+                <Users className="w-4 h-4 text-[#0B3321] dark:text-emerald-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                  <p className="font-bold text-[#0B3321] dark:text-emerald-300">Área de Ensino Compartilhada da Família</p>
                   <p className="mt-0.5">
                     Ao entrar aqui, você acessa imediatamente os PDFs, pastas do Drive, aulas e simulados publicados na
                     biblioteca da família.
                   </p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-1 p-1 bg-white/80 border border-emerald-200/80 rounded-lg">
+              <div className="grid grid-cols-2 gap-1 p-1 bg-white/80 dark:bg-slate-900 border border-emerald-200/80 dark:border-emerald-800 rounded-lg">
                 <button
                   type="button"
                   onClick={() => setFamilyStep('login')}
                   className={`py-1.5 text-xs font-semibold rounded-md ${
-                    familyStep === 'login' ? 'bg-[#0B3321] text-white' : 'text-slate-700'
+                    familyStep === 'login' ? 'bg-[#0B3321] text-white' : 'text-slate-700 dark:text-slate-300'
                   }`}
                 >
                   Já tenho acesso
@@ -266,7 +266,7 @@ export function AuthView() {
                   type="button"
                   onClick={() => setFamilyStep('register')}
                   className={`py-1.5 text-xs font-semibold rounded-md ${
-                    familyStep === 'register' ? 'bg-[#0B3321] text-white' : 'text-slate-700'
+                    familyStep === 'register' ? 'bg-[#0B3321] text-white' : 'text-slate-700 dark:text-slate-300'
                   }`}
                 >
                   Primeiro acesso
@@ -278,13 +278,13 @@ export function AuthView() {
           {errorMsg && (
             <div
               role="alert"
-              className="mb-5 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-900 text-sm flex items-start gap-2.5"
+              className="mb-5 p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-900 dark:text-red-200 text-sm flex items-start gap-2.5"
             >
-              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-700" />
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-700 dark:text-red-400" />
               <div className="space-y-2">
                 <p>{errorMsg}</p>
                 {showProviderHelp && (
-                  <div className="text-xs text-red-900 pt-2 border-t border-red-200 space-y-2">
+                  <div className="text-xs text-red-900 dark:text-red-200 pt-2 border-t border-red-200 dark:border-red-800 space-y-2">
                     <p>
                       Para ativar login por e-mail/senha: acesse o <strong>Firebase Console</strong> →{' '}
                       <em>Authentication</em> → <em>Sign-in method</em> → <em>Email/Password</em> → <strong>Enable</strong>.
@@ -294,7 +294,7 @@ export function AuthView() {
                         href={`https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/providers`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 font-semibold underline text-red-950 hover:text-red-800"
+                        className="inline-flex items-center gap-1 font-semibold underline text-red-950 dark:text-red-200 hover:text-red-800"
                       >
                         <span>Abrir Sign-in method no Firebase Console</span>
                         <ExternalLink className="w-3 h-3" />
@@ -318,7 +318,7 @@ export function AuthView() {
             {isRegistering && (
               <>
                 <div>
-                  <label htmlFor="auth-name" className="block text-sm font-medium text-slate-700 mb-1.5">
+                  <label htmlFor="auth-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                     {mode === 'family' ? 'Nome do familiar' : 'Nome completo'}
                   </label>
                   <div className="relative">
@@ -330,14 +330,14 @@ export function AuthView() {
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
                       placeholder="Ex.: Ana Paula Oliveira"
-                      className="w-full min-h-[44px] pl-10 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
+                      className="w-full min-h-[44px] pl-10 pr-3.5 py-2.5 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
                     />
                   </div>
                 </div>
 
                 {mode === 'register' && (
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
-                    <p className="font-semibold text-slate-800">Perfil inicial: Estudante</p>
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">Perfil inicial: Estudante</p>
                     <p className="leading-relaxed">
                       Novas contas são criadas no ambiente do estudante. Permissões de Editor/Professor ou
                       Administrador são atribuídas exclusivamente no Painel Administrativo.
@@ -348,7 +348,7 @@ export function AuthView() {
             )}
 
             <div>
-              <label htmlFor="auth-email" className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label htmlFor="auth-email" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 E-mail
               </label>
               <div className="relative">
@@ -360,13 +360,13 @@ export function AuthView() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="seuemail@exemplo.com"
-                  className="w-full min-h-[44px] pl-10 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
+                  className="w-full min-h-[44px] pl-10 pr-3.5 py-2.5 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="auth-password" className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label htmlFor="auth-password" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Senha
               </label>
               <div className="relative">
@@ -379,13 +379,13 @@ export function AuthView() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Mínimo 6 caracteres"
-                  className="w-full min-h-[44px] pl-10 pr-11 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
+                  className="w-full min-h-[44px] pl-10 pr-11 py-2.5 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-slate-800 rounded-lg"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -413,9 +413,9 @@ export function AuthView() {
           </form>
 
           <div className="my-5 flex items-center gap-3">
-            <div className="h-px flex-1 bg-slate-200" />
-            <span className="text-xs text-slate-500">ou acesso instantâneo</span>
-            <div className="h-px flex-1 bg-slate-200" />
+            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+            <span className="text-xs text-slate-500 dark:text-slate-400">ou acesso instantâneo</span>
+            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
           </div>
 
           <div className="space-y-2.5">
@@ -423,7 +423,7 @@ export function AuthView() {
               type="button"
               onClick={handleGoogle}
               disabled={loading}
-              className="w-full min-h-[46px] px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-900 text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2.5"
+              className="w-full min-h-[46px] px-4 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2.5"
             >
               <svg className="w-4 h-4 shrink-0" viewBox="0 0 48 48" aria-hidden="true">
                 <path
@@ -450,16 +450,16 @@ export function AuthView() {
               type="button"
               onClick={enterGuestMode}
               disabled={loading}
-              className="w-full min-h-[46px] px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200 text-[#0B3321] text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+              className="w-full min-h-[46px] px-4 py-2.5 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100/80 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 text-[#0B3321] dark:text-emerald-300 text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
             >
-              <BookOpen className="w-4 h-4 shrink-0 text-[#146C43]" />
+              <BookOpen className="w-4 h-4 shrink-0 text-[#146C43] dark:text-emerald-400" />
               <span>Entrar como Visitante (sem e-mail)</span>
             </button>
-            <p className="text-[11px] text-center text-slate-500 leading-relaxed">
+            <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 leading-relaxed">
               No modo visitante você acessa todo o conteúdo imediatamente e seu progresso fica salvo neste navegador.
             </p>
 
-            <div className="pt-2 border-t border-slate-100">
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
               <PWAInstallButton variant="auth" />
             </div>
           </div>

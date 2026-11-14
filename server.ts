@@ -252,7 +252,7 @@ function isSafePublicHttpUrl(rawUrl: string): boolean {
   }
 }
 
-type StaffRole = 'admin' | 'editor' | 'dev';
+type StaffRole = 'admin' | 'editor' | 'teacher' | 'dev';
 type EffectiveUserRole = StaffRole | 'student';
 
 interface VerifiedFirebaseUser {
@@ -272,17 +272,18 @@ const PRIMARY_ADMIN_EMAILS = new Set([
   'alfaservicosgraficosx5@gmail.com',
 ]);
 
-function loadFirebaseAppletConfig(): { projectId: string; firestoreDatabaseId: string } {
+function loadFirebaseAppletConfig(): { projectId: string; firestoreDatabaseId: string; storageBucket: string } {
   try {
     const configPath = path.join(__dirname, 'firebase-applet-config.json');
     const raw = fs.readFileSync(configPath, 'utf8');
-    const parsed = JSON.parse(raw) as { projectId?: string; firestoreDatabaseId?: string };
+    const parsed = JSON.parse(raw) as { projectId?: string; firestoreDatabaseId?: string; storageBucket?: string };
     return {
       projectId: parsed.projectId || '',
       firestoreDatabaseId: parsed.firestoreDatabaseId || '(default)',
+      storageBucket: parsed.storageBucket || '',
     };
   } catch {
-    return { projectId: '', firestoreDatabaseId: '(default)' };
+    return { projectId: '', firestoreDatabaseId: '(default)', storageBucket: '' };
   }
 }
 
@@ -316,11 +317,8 @@ function normalizeServerRole(rawRole?: string | null, email?: string): Effective
   if (normalizedEmail && PRIMARY_ADMIN_EMAILS.has(normalizedEmail)) {
     return rawRole === 'dev' ? 'dev' : 'admin';
   }
-  if (rawRole === 'admin' || rawRole === 'dev' || rawRole === 'editor') {
+  if (rawRole === 'admin' || rawRole === 'dev' || rawRole === 'editor' || rawRole === 'teacher') {
     return rawRole;
-  }
-  if (rawRole === 'teacher') {
-    return 'editor';
   }
   return 'student';
 }
@@ -1414,6 +1412,12 @@ async function createApp() {
         contextTitle?: string;
         contextSummary?: string;
         campus?: string;
+        libraryContext?: Array<{
+          title?: string;
+          discipline?: string;
+          url?: string;
+          excerpt?: string;
+        }>;
       };
 
       const rawMessages = Array.isArray(body.messages) ? body.messages : [];
@@ -1436,13 +1440,31 @@ async function createApp() {
           ? 'Nível Médio (Cargo 04 – Assistência Administrativa · PL.AL.060)'
           : 'Nível Superior (Cargo 03 – Assessoramento Legislativo · PL.AL.102)';
 
+      const libraryItems = Array.isArray(body.libraryContext)
+        ? body.libraryContext
+            .filter((item) => item && typeof item.title === 'string' && item.title.trim())
+            .slice(0, 4)
+        : [];
+
+      const libraryBlock =
+        libraryItems.length > 0
+          ? `MATERIAIS DA BIBLIOTECA SELECIONADOS PELO ESTUDANTE (priorize e cite explicitamente o título/página quando responder):\n${libraryItems
+              .map(
+                (item, idx) =>
+                  `[Fonte ${idx + 1}] ${String(item.title).slice(0, 180)}${item.discipline ? ` (${String(item.discipline).slice(0, 80)})` : ''}\n${String(item.excerpt || '').slice(0, 2200)}`
+              )
+              .join('\n\n')}`
+          : '';
+
       const systemParts = [
         `Você é o assistente de estudos Gemini para o Concurso ALEPA 2026 (Banca Fundação CETAP), foco em ${campusLabel}.`,
         'Responda sempre em português do Brasil de forma clara, estruturada e objetiva.',
+        'Jamais invente artigos de lei ou fontes não fornecidas. Se usar materiais da biblioteca selecionados, cite o título da fonte correspondente.',
         body.contextTitle ? `Material em foco: ${body.contextTitle}` : '',
         body.contextSummary
           ? `Use também como referência o resumo já gerado abaixo:\n---\n${body.contextSummary.slice(0, 8000)}\n---`
           : '',
+        libraryBlock,
       ].filter(Boolean);
 
       const response = await ai.models.generateContent({
@@ -1456,6 +1478,7 @@ async function createApp() {
       res.json({
         reply: response.text?.trim() || 'Não consegui gerar uma resposta agora.',
         model: GEMINI_MODEL,
+        citedTitles: libraryItems.map((i) => i.title),
       });
     } catch (err) {
       const mapped = formatGeminiError(err);
@@ -2031,6 +2054,344 @@ Regras obrigatórias:
             explanation: String(item.explanation || '').slice(0, 1900),
             legalBasis: item.legalBasis ? String(item.legalBasis).slice(0, 380) : '',
           },
+          model: GEMINI_MODEL,
+        });
+      } catch (err) {
+        const mapped = formatGeminiError(err);
+        res.status(mapped.status).json({ error: mapped.message });
+      }
+    }
+  );
+
+  // ---------------------------------------------------------------------------
+  // Cloud Storage Health & Document Intelligence / Teacher / Admin AI Endpoints
+  // ---------------------------------------------------------------------------
+  app.get(
+    '/api/storage/health',
+    requireRole(['admin', 'dev']),
+    (_req: Request, res: Response) => {
+      const projectId = FIREBASE_APPLET_CONFIG.projectId;
+      const bucket = FIREBASE_APPLET_CONFIG.storageBucket;
+      res.json({
+        configured: Boolean(bucket && projectId),
+        projectId,
+        storageBucket: bucket,
+        firestoreDatabaseId: FIREBASE_APPLET_CONFIG.firestoreDatabaseId,
+        consoleUrl: projectId
+          ? `https://console.firebase.google.com/project/${projectId}/storage`
+          : '',
+        geminiConfigured: Boolean(process.env.GEMINI_API_KEY?.trim()),
+        spotifyConfigured: Boolean(process.env.SPOTIFY_CLIENT_ID?.trim() && process.env.SPOTIFY_CLIENT_SECRET?.trim()),
+        checkedAt: new Date().toISOString(),
+      });
+    }
+  );
+
+  app.post('/api/ai/classify-document', geminiRateLimiter);
+  app.post(
+    '/api/ai/classify-document',
+    requireRole(['admin', 'editor', 'teacher', 'dev']),
+    async (req: Request, res: Response) => {
+      try {
+        const body = (req.body || {}) as {
+          title?: string;
+          fileName?: string;
+          metadataTitle?: string;
+          metadataAuthor?: string;
+          sampleSnippet?: string;
+          outlineTitles?: string[];
+          campusLevel?: 'geral' | 'superior' | 'medio';
+          availableDisciplines?: Array<{ id: string; name: string }>;
+        };
+
+        const title = (body.title || '').trim().slice(0, 200);
+        const fileName = (body.fileName || '').trim().slice(0, 240);
+        const sampleSnippet = (body.sampleSnippet || '').trim().slice(0, 3500);
+        if (!title && !fileName && !sampleSnippet) {
+          res.status(400).json({ error: 'Forneça o título, nome do arquivo ou trecho do PDF para classificação.' });
+          return;
+        }
+
+        const ai = getGeminiClient();
+        const disciplinesList = Array.isArray(body.availableDisciplines)
+          ? body.availableDisciplines.slice(0, 40).map((d) => `${d.id}: ${d.name}`).join('\n')
+          : '';
+
+        const prompt = [
+          'Analise os metadados e trecho abaixo para sugerir catalogação pedagógica (sempre sujeita à revisão humana do editor/administrador):',
+          title ? `Título atual: ${title}` : '',
+          fileName ? `Arquivo: ${fileName}` : '',
+          body.metadataTitle ? `Título interno PDF: ${body.metadataTitle}` : '',
+          body.metadataAuthor ? `Autor PDF: ${body.metadataAuthor}` : '',
+          body.campusLevel ? `Escolaridade informada: ${body.campusLevel}` : '',
+          Array.isArray(body.outlineTitles) && body.outlineTitles.length
+            ? `Sumário detectado: ${body.outlineTitles.slice(0, 12).join(' | ')}`
+            : '',
+          disciplinesList ? `Disciplinas válidas (escolha um ID exato se compatível):\n${disciplinesList}` : '',
+          sampleSnippet ? `Trecho extraído:\n${sampleSnippet}` : '',
+          'Retorne JSON com: suggestedTitle, suggestedDisciplineId, suggestedTopic, suggestedCampusLevel ("geral"|"superior"|"medio"), suggestedRelevanceTier ("essencial"|"complementar"|"aprofundamento"), suggestedSummary (2-3 linhas em pt-BR), suggestedKeywords (array de 3 a 8 termos).',
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+
+        const response = await ai.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: prompt,
+          config: {
+            systemInstruction:
+              'Você é um especialista de catalogação bibliográfica do MEU CAMPUS ALEPA 2026. Nunca invente informações ausentes; baseie-se nos dados reais fornecidos.',
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                suggestedTitle: { type: Type.STRING },
+                suggestedDisciplineId: { type: Type.STRING },
+                suggestedTopic: { type: Type.STRING },
+                suggestedCampusLevel: { type: Type.STRING },
+                suggestedRelevanceTier: { type: Type.STRING },
+                suggestedSummary: { type: Type.STRING },
+                suggestedKeywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+              },
+              required: [
+                'suggestedTitle',
+                'suggestedDisciplineId',
+                'suggestedTopic',
+                'suggestedCampusLevel',
+                'suggestedRelevanceTier',
+                'suggestedSummary',
+                'suggestedKeywords',
+              ],
+            },
+          },
+        });
+
+        const parsed = JSON.parse(response.text || '{}') as {
+          suggestedTitle?: string;
+          suggestedDisciplineId?: string;
+          suggestedTopic?: string;
+          suggestedCampusLevel?: string;
+          suggestedRelevanceTier?: string;
+          suggestedSummary?: string;
+          suggestedKeywords?: string[];
+        };
+
+        res.json({
+          suggestion: {
+            suggestedTitle: String(parsed.suggestedTitle || title || fileName).slice(0, 180),
+            suggestedDisciplineId: String(parsed.suggestedDisciplineId || '').slice(0, 80),
+            suggestedTopic: String(parsed.suggestedTopic || '').slice(0, 220),
+            suggestedCampusLevel: ['geral', 'superior', 'medio'].includes(String(parsed.suggestedCampusLevel))
+              ? parsed.suggestedCampusLevel
+              : body.campusLevel || 'superior',
+            suggestedRelevanceTier: ['essencial', 'complementar', 'aprofundamento'].includes(
+              String(parsed.suggestedRelevanceTier)
+            )
+              ? parsed.suggestedRelevanceTier
+              : 'essencial',
+            suggestedSummary: String(parsed.suggestedSummary || '').slice(0, 950),
+            suggestedKeywords: Array.isArray(parsed.suggestedKeywords)
+              ? parsed.suggestedKeywords.slice(0, 10).map((k) => String(k).trim()).filter(Boolean)
+              : [],
+          },
+          requiresHumanReview: true,
+          model: GEMINI_MODEL,
+        });
+      } catch (err) {
+        const mapped = formatGeminiError(err);
+        res.status(mapped.status).json({ error: mapped.message });
+      }
+    }
+  );
+
+  app.post('/api/ai/teacher-assistant', geminiRateLimiter);
+  app.post(
+    '/api/ai/teacher-assistant',
+    requireRole(['admin', 'editor', 'teacher', 'dev']),
+    async (req: Request, res: Response) => {
+      try {
+        const body = (req.body || {}) as {
+          action?: 'draft_lesson' | 'draft_activity_questions' | 'analyze_class_errors';
+          disciplineName?: string;
+          campusLevel?: 'superior' | 'medio';
+          topicTitle?: string;
+          contextText?: string;
+          questionCount?: number;
+        };
+
+        const action = body.action || 'draft_lesson';
+        const disciplineName = (body.disciplineName || '').trim().slice(0, 140);
+        const campusLevel = body.campusLevel === 'medio' ? 'medio' : 'superior';
+        const topicTitle = (body.topicTitle || '').trim().slice(0, 200);
+        const contextText = (body.contextText || '').trim().slice(0, 5000);
+        const ai = getGeminiClient();
+
+        const teacherRule =
+          'Você é o Assistente Pedagógico do Professor no MEU CAMPUS ALEPA 2026 (Banca CETAP). Responda em pt-BR claro e objetivo. Nunca invente artigos de lei ou súmulas. Tudo gerado entra como rascunho para revisão do professor.';
+
+        if (action === 'analyze_class_errors') {
+          if (!contextText) {
+            res.status(400).json({ error: 'Envie o resumo dos erros ou dificuldades da turma para análise.' });
+            return;
+          }
+          const response = await ai.models.generateContent({
+            model: GEMINI_MODEL,
+            contents: `Analise exclusivamente os dados reais de erros/dificuldades abaixo e proponha recomendações de aula de reforço e lista de revisão:\n\n${contextText}`,
+            config: { systemInstruction: teacherRule },
+          });
+          res.json({ action, text: response.text?.trim() || '', model: GEMINI_MODEL });
+          return;
+        }
+
+        if (action === 'draft_activity_questions') {
+          const count = Math.max(1, Math.min(5, Number(body.questionCount) || 3));
+          const response = await ai.models.generateContent({
+            model: GEMINI_MODEL,
+            contents: [
+              disciplineName ? `Disciplina: ${disciplineName}` : '',
+              `Nível: ${campusLevel}`,
+              topicTitle ? `Assunto: ${topicTitle}` : '',
+              contextText ? `Orientação do professor:\n${contextText}` : '',
+              `Elabore ${count} questões objetivas (5 alternativas A-E, 1 correta) e 1 questão discursiva sugerida para atividade de turma.`,
+            ]
+              .filter(Boolean)
+              .join('\n\n'),
+            config: {
+              systemInstruction: teacherRule,
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  questions: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        topicTitle: { type: Type.STRING },
+                        statement: { type: Type.STRING },
+                        options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        correctIndex: { type: Type.INTEGER },
+                        explanation: { type: Type.STRING },
+                        legalBasis: { type: Type.STRING },
+                      },
+                      required: ['topicTitle', 'statement', 'options', 'correctIndex', 'explanation'],
+                    },
+                  },
+                  discursivePrompt: { type: Type.STRING },
+                },
+                required: ['questions', 'discursivePrompt'],
+              },
+            },
+          });
+
+          const parsed = JSON.parse(response.text || '{}') as {
+            questions?: Array<{
+              topicTitle?: string;
+              statement?: string;
+              options?: string[];
+              correctIndex?: number;
+              explanation?: string;
+              legalBasis?: string;
+            }>;
+            discursivePrompt?: string;
+          };
+
+          res.json({
+            action,
+            questions: Array.isArray(parsed.questions) ? parsed.questions.slice(0, 5) : [],
+            discursivePrompt: String(parsed.discursivePrompt || '').slice(0, 1500),
+            model: GEMINI_MODEL,
+          });
+          return;
+        }
+
+        // draft_lesson
+        if (!topicTitle && !disciplineName && !contextText) {
+          res.status(400).json({ error: 'Informe disciplina, tema ou roteiro base para elaborar a aula.' });
+          return;
+        }
+
+        const lessonResponse = await ai.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: [
+            disciplineName ? `Disciplina: ${disciplineName}` : '',
+            `Nível: ${campusLevel}`,
+            topicTitle ? `Tema da aula: ${topicTitle}` : '',
+            contextText ? `Diretrizes do professor:\n${contextText}` : '',
+            'Retorne JSON com: title, summary (resumo de 2-3 linhas) e content (roteiro completo da aula em Markdown estruturado com objetivos, explicação didática, pontos de atenção da banca e checklist de revisão).',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+          config: {
+            systemInstruction: teacherRule,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                summary: { type: Type.STRING },
+                content: { type: Type.STRING },
+              },
+              required: ['title', 'summary', 'content'],
+            },
+          },
+        });
+
+        const parsedLesson = JSON.parse(lessonResponse.text || '{}') as {
+          title?: string;
+          summary?: string;
+          content?: string;
+        };
+
+        res.json({
+          action: 'draft_lesson',
+          draft: {
+            title: String(parsedLesson.title || topicTitle || 'Nova Aula').slice(0, 190),
+            summary: String(parsedLesson.summary || '').slice(0, 950),
+            content: String(parsedLesson.content || '').slice(0, 11500),
+          },
+          model: GEMINI_MODEL,
+        });
+      } catch (err) {
+        const mapped = formatGeminiError(err);
+        res.status(mapped.status).json({ error: mapped.message });
+      }
+    }
+  );
+
+  app.post('/api/ai/admin-assistant', geminiRateLimiter);
+  app.post(
+    '/api/ai/admin-assistant',
+    requireRole(['admin', 'editor', 'dev']),
+    async (req: Request, res: Response) => {
+      try {
+        const body = (req.body || {}) as {
+          prompt?: string;
+          platformSnapshot?: string;
+        };
+        const userPrompt = (body.prompt || '').trim().slice(0, 2500);
+        const snapshot = (body.platformSnapshot || '').trim().slice(0, 6000);
+        if (!userPrompt) {
+          res.status(400).json({ error: 'Digite uma consulta para o Assistente Administrativo.' });
+          return;
+        }
+
+        const ai = getGeminiClient();
+        const response = await ai.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: [
+            snapshot ? `DADOS REAIS ATUAIS DA PLATAFORMA:\n${snapshot}` : '',
+            `Solicitação administrativa:\n${userPrompt}`,
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+          config: {
+            systemInstruction:
+              'Você é o Assistente Estratégico Administrativo do MEU CAMPUS ALEPA 2026. Baseie-se estritamente nos dados reais fornecidos no contexto; nunca invente estatísticas, custos exatos não informados ou ações autônomas. Recomende passos claros para decisão humana.',
+          },
+        });
+
+        res.json({
+          reply: response.text?.trim() || '',
           model: GEMINI_MODEL,
         });
       } catch (err) {

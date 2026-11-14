@@ -2,13 +2,17 @@
   "entities": {
     "UserProfile": {
       "title": "UserProfile",
-      "description": "Perfil do estudante, editor, administrador ou desenvolvedor no Meu Campus ALEPA",
+      "description": "Perfil de estudante, professor, administrador de conteúdo ou administrador principal no Meu Campus ALEPA",
       "type": "object",
       "properties": {
         "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
         "email": { "type": "string", "maxLength": 160 },
-        "role": { "type": "string", "enum": ["student", "editor", "admin", "dev", "teacher"] },
+        "role": { "type": "string", "enum": ["student", "teacher", "editor", "admin", "dev"] },
+        "active": { "type": "boolean" },
+        "assignedClassIds": { "type": "array" },
+        "assignedDisciplineIds": { "type": "array" },
+        "preferences": { "type": "object" },
         "dailyGoalMinutes": { "type": "integer" },
         "examDate": { "type": "string", "maxLength": 20 },
         "targetCargo": { "type": "string", "maxLength": 120 },
@@ -91,7 +95,7 @@
     },
     "StudyMaterial": {
       "title": "StudyMaterial",
-      "description": "Materiais catalogados da biblioteca digital com ciclo rascunho/publicado/arquivado",
+      "description": "Materiais catalogados da biblioteca digital com fluxo editorial completo",
       "type": "object",
       "properties": {
         "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
@@ -110,8 +114,18 @@
         "isOfficialContent": { "type": "boolean" },
         "relevanceTier": { "type": "string", "enum": ["essencial", "complementar", "aprofundamento"] },
         "campusLevel": { "type": "string", "enum": ["geral", "superior", "medio"] },
-        "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+        "status": { "type": "string", "enum": ["draft", "in_review", "approved", "published", "archived"] },
         "updatedBy": { "type": "string", "maxLength": 128 },
+        "reviewedBy": { "type": "string", "maxLength": 128 },
+        "reviewNotes": { "type": "string", "maxLength": 600 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "keywords": { "type": "array" },
+        "author": { "type": "string", "maxLength": 160 },
+        "edition": { "type": "string", "maxLength": 80 },
+        "year": { "type": "integer" },
+        "checksumSha256": { "type": "string", "maxLength": 128 },
+        "storageProvider": { "type": "string", "enum": ["firebase_storage", "google_drive", "local", "external"] },
+        "storagePath": { "type": "string", "maxLength": 500 },
         "fileName": { "type": "string", "maxLength": 240 },
         "description": { "type": "string", "maxLength": 1000 },
         "isShared": { "type": "boolean" },
@@ -128,7 +142,7 @@
     },
     "SharedQuestion": {
       "title": "SharedQuestion",
-      "description": "Questão cadastrada com ciclo de revisão e publicação",
+      "description": "Questão cadastrada com ciclo editorial e classificação de origem e dificuldade",
       "type": "object",
       "properties": {
         "authorId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
@@ -141,8 +155,12 @@
         "legalBasis": { "type": "string", "maxLength": 400 },
         "source": { "type": "string", "maxLength": 160 },
         "originType": { "type": "string", "enum": ["official_cetap", "official_camara", "official_alepa", "training_platform", "ai_generated"] },
+        "difficulty": { "type": "string", "enum": ["basico", "intermediario", "avancado"] },
+        "questionFormat": { "type": "string", "enum": ["objetiva", "discursiva"] },
+        "classId": { "type": "string", "maxLength": 128 },
+        "reviewNotes": { "type": "string", "maxLength": 600 },
         "escolaridade": { "type": "string", "enum": ["superior", "medio"] },
-        "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+        "status": { "type": "string", "enum": ["draft", "in_review", "approved", "published", "archived"] },
         "isOfficial": { "type": "boolean" },
         "isPublished": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" },
@@ -212,7 +230,7 @@
         "examPoints": { "type": "number" },
         "tieBreakerOrder": { "type": "integer" },
         "recommendedMinutesPerCycle": { "type": "integer" },
-        "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+        "status": { "type": "string", "enum": ["draft", "in_review", "approved", "published", "archived"] },
         "authorId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
@@ -231,7 +249,7 @@
         "subtopics": { "type": "array" },
         "highYield": { "type": "boolean" },
         "order": { "type": "integer" },
-        "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+        "status": { "type": "string", "enum": ["draft", "in_review", "approved", "published", "archived"] },
         "authorId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
@@ -249,7 +267,7 @@
         "campusLevel": { "type": "string", "enum": ["geral", "superior", "medio"] },
         "durationMinutes": { "type": "integer" },
         "questionIds": { "type": "array" },
-        "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+        "status": { "type": "string", "enum": ["draft", "in_review", "approved", "published", "archived"] },
         "authorId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
@@ -267,7 +285,7 @@
         "campusLevel": { "type": "string", "enum": ["geral", "superior", "medio"] },
         "priority": { "type": "string", "enum": ["normal", "importante", "urgente"] },
         "eventDate": { "type": "string", "maxLength": 20 },
-        "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+        "status": { "type": "string", "enum": ["draft", "in_review", "approved", "published", "archived"] },
         "authorId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
@@ -314,6 +332,179 @@
         "lastReadAt",
         "updatedAt"
       ]
+    },
+    "ExamConcurso": {
+      "title": "ExamConcurso",
+      "description": "Registro escalável de concursos, instituições, editais e cargos atendidos pela plataforma",
+      "type": "object",
+      "properties": {
+        "examId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "institution": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "code": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "year": { "type": "integer" },
+        "levels": { "type": "array" },
+        "positions": { "type": "array" },
+        "examDate": { "type": "string", "maxLength": 20 },
+        "status": { "type": "string", "enum": ["draft", "in_review", "approved", "published", "archived"] },
+        "authorId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["examId", "title", "institution", "code", "year", "levels", "positions", "status", "authorId", "createdAt", "updatedAt"]
+    },
+    "Classroom": {
+      "title": "Classroom",
+      "description": "Turma vinculada a concurso, nível, disciplinas e professores",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "code": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "examId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "campusLevel": { "type": "string", "enum": ["superior", "medio"] },
+        "disciplineIds": { "type": "array" },
+        "teacherIds": { "type": "array" },
+        "description": { "type": "string", "maxLength": 800 },
+        "active": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["draft", "in_review", "approved", "published", "archived"] },
+        "authorId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "name", "code", "examId", "campusLevel", "disciplineIds", "teacherIds", "active", "status", "authorId", "createdAt", "updatedAt"]
+    },
+    "ClassEnrollment": {
+      "title": "ClassEnrollment",
+      "description": "Matrícula de estudante em turma com escopo de professor responsável",
+      "type": "object",
+      "properties": {
+        "enrollmentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "studentId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "studentName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "studentEmail": { "type": "string", "maxLength": 160 },
+        "teacherId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["enrollmentId", "classId", "studentId", "studentName", "teacherId", "status", "createdAt", "updatedAt"]
+    },
+    "Lesson": {
+      "title": "Lesson",
+      "description": "Aula ou roteiro de estudos publicado pelo professor com materiais vinculados",
+      "type": "object",
+      "properties": {
+        "lessonId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "disciplineId": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "campusLevel": { "type": "string", "enum": ["superior", "medio"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "summary": { "type": "string", "maxLength": 1000 },
+        "content": { "type": "string", "maxLength": 12000 },
+        "videoUrl": { "type": "string", "maxLength": 1000 },
+        "materialIds": { "type": "array" },
+        "order": { "type": "integer" },
+        "status": { "type": "string", "enum": ["draft", "in_review", "approved", "published", "archived"] },
+        "authorId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "reviewedBy": { "type": "string", "maxLength": 128 },
+        "reviewNotes": { "type": "string", "maxLength": 600 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["lessonId", "classId", "disciplineId", "campusLevel", "title", "summary", "content", "materialIds", "order", "status", "authorId", "createdAt", "updatedAt"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "Atividade objetiva, discursiva ou mista atribuída a uma turma",
+      "type": "object",
+      "properties": {
+        "activityId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "disciplineId": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "campusLevel": { "type": "string", "enum": ["superior", "medio"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "instructions": { "type": "string", "maxLength": 3000 },
+        "activityType": { "type": "string", "enum": ["objetiva", "discursiva", "mista"] },
+        "dueDate": { "type": "string", "maxLength": 20 },
+        "maxScore": { "type": "number" },
+        "questionIds": { "type": "array" },
+        "prompts": { "type": "array" },
+        "status": { "type": "string", "enum": ["draft", "in_review", "approved", "published", "archived"] },
+        "authorId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "reviewedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["activityId", "classId", "disciplineId", "campusLevel", "title", "instructions", "activityType", "maxScore", "questionIds", "prompts", "status", "authorId", "createdAt", "updatedAt"]
+    },
+    "ActivitySubmission": {
+      "title": "ActivitySubmission",
+      "description": "Entrega de atividade pelo estudante com correção objetiva automática e correção discursiva/feedback pelo professor",
+      "type": "object",
+      "properties": {
+        "submissionId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "activityId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "classId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "studentId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "studentName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "teacherId": { "type": "string", "maxLength": 128 },
+        "objectiveAnswers": { "type": "object" },
+        "discursiveResponses": { "type": "object" },
+        "objectiveScore": { "type": "number" },
+        "manualScore": { "type": "number" },
+        "finalScore": { "type": "number" },
+        "feedback": { "type": "string", "maxLength": 4000 },
+        "status": { "type": "string", "enum": ["submitted", "graded", "returned"] },
+        "gradedBy": { "type": "string", "maxLength": 128 },
+        "revisionHistory": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["submissionId", "activityId", "classId", "studentId", "studentName", "teacherId", "objectiveAnswers", "discursiveResponses", "objectiveScore", "manualScore", "finalScore", "status", "revisionHistory", "createdAt", "updatedAt"]
+    },
+    "StorageMetadataRecord": {
+      "title": "StorageMetadataRecord",
+      "description": "Registro de metadados de arquivos hospedados no Cloud Storage ou provedores vinculados",
+      "type": "object",
+      "properties": {
+        "fileId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "mimeType": { "type": "string", "maxLength": 120 },
+        "sizeBytes": { "type": "integer" },
+        "checksumSha256": { "type": "string", "maxLength": 128 },
+        "storageProvider": { "type": "string", "enum": ["firebase_storage", "google_drive", "local", "external"] },
+        "bucket": { "type": "string", "maxLength": 160 },
+        "objectPath": { "type": "string", "maxLength": 500 },
+        "downloadUrl": { "type": "string", "maxLength": 2000 },
+        "category": { "type": "string", "enum": ["pdf", "video", "audio", "image", "other"] },
+        "campusLevel": { "type": "string", "enum": ["geral", "superior", "medio"] },
+        "linkedMaterialId": { "type": "string", "maxLength": 128 },
+        "version": { "type": "integer" },
+        "archived": { "type": "boolean" },
+        "uploadedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fileId", "fileName", "mimeType", "sizeBytes", "storageProvider", "bucket", "objectPath", "downloadUrl", "category", "campusLevel", "version", "archived", "uploadedBy", "createdAt", "updatedAt"]
+    },
+    "AuditLogEntry": {
+      "title": "AuditLogEntry",
+      "description": "Registro imutável e anexável de ações administrativas, editoriais e docentes",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "actorEmail": { "type": "string", "maxLength": 160 },
+        "actorRole": { "type": "string", "enum": ["student", "teacher", "editor", "admin", "dev"] },
+        "action": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "targetCollection": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "targetId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["logId", "actorId", "actorRole", "action", "targetCollection", "targetId", "summary", "createdAt"]
     }
   },
   "firestore": {
@@ -347,11 +538,11 @@
     },
     "/materials/{materialId}": {
       "schema": { "$ref": "#/entities/StudyMaterial" },
-      "description": "Biblioteca digital estruturada com ciclo de publicação"
+      "description": "Biblioteca digital estruturada com ciclo de revisão e publicação"
     },
     "/sharedQuestions/{questionId}": {
       "schema": { "$ref": "#/entities/SharedQuestion" },
-      "description": "Questões oficiais e de treinamento complementar cadastradas"
+      "description": "Questões oficiais, docentes e de treinamento complementar cadastradas"
     },
     "/familyMembers/{memberId}": {
       "schema": { "$ref": "#/entities/FamilyMember" },
@@ -376,6 +567,38 @@
     "/platformNotices/{noticeId}": {
       "schema": { "$ref": "#/entities/PlatformNotice" },
       "description": "Avisos e comunicados de cronograma publicados na plataforma"
+    },
+    "/exams/{examId}": {
+      "schema": { "$ref": "#/entities/ExamConcurso" },
+      "description": "Cadastro multi-concurso (ALEPA 2026 e futuros concursos/instituições)"
+    },
+    "/classes/{classId}": {
+      "schema": { "$ref": "#/entities/Classroom" },
+      "description": "Turmas organizadas por concurso, nível e docentes"
+    },
+    "/enrollments/{enrollmentId}": {
+      "schema": { "$ref": "#/entities/ClassEnrollment" },
+      "description": "Matrículas dos estudantes nas turmas"
+    },
+    "/lessons/{lessonId}": {
+      "schema": { "$ref": "#/entities/Lesson" },
+      "description": "Aulas e roteiros publicados para turmas"
+    },
+    "/activities/{activityId}": {
+      "schema": { "$ref": "#/entities/Activity" },
+      "description": "Atividades e avaliações objetivas/discursivas por turma"
+    },
+    "/submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/ActivitySubmission" },
+      "description": "Entregas dos estudantes e notas/feedback do professor"
+    },
+    "/storageMetadata/{fileId}": {
+      "schema": { "$ref": "#/entities/StorageMetadataRecord" },
+      "description": "Inventário e metadados dos arquivos em nuvem"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLogEntry" },
+      "description": "Logs imutáveis de auditoria de governança"
     }
   }
 }

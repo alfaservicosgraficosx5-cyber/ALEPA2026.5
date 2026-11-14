@@ -54,6 +54,7 @@ interface SavedSummaryEntry {
 interface ChatMessage {
   role: 'user' | 'model';
   text: string;
+  citedTitles?: string[];
 }
 
 const SUMMARIES_STORAGE_KEY = 'alepa_gemini_summaries_v1';
@@ -111,7 +112,7 @@ function renderInlineFormatting(text: string): React.ReactNode[] {
   return parts.map((part, idx) => {
     if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
       return (
-        <strong key={idx} className="font-bold text-slate-900">
+        <strong key={idx} className="font-bold text-slate-900 dark:text-slate-100">
           {part.slice(2, -2)}
         </strong>
       );
@@ -120,7 +121,7 @@ function renderInlineFormatting(text: string): React.ReactNode[] {
       return (
         <span
           key={idx}
-          className="inline-block font-mono text-[11px] font-semibold px-1.5 py-0.5 mx-0.5 rounded bg-emerald-50 text-[#0B3321] border border-emerald-200 align-baseline"
+          className="inline-block font-mono text-[11px] font-semibold px-1.5 py-0.5 mx-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 align-baseline"
         >
           {part}
         </span>
@@ -133,7 +134,7 @@ function renderInlineFormatting(text: string): React.ReactNode[] {
 function FormattedSummary({ text }: { text: string }) {
   const lines = text.split('\n');
   return (
-    <div className="space-y-2 text-sm leading-relaxed text-slate-800">
+    <div className="space-y-2 text-sm leading-relaxed text-slate-800 dark:text-slate-200">
       {lines.map((rawLine, index) => {
         const line = rawLine.trim();
         if (!line) {
@@ -141,7 +142,7 @@ function FormattedSummary({ text }: { text: string }) {
         }
         if (line.startsWith('### ')) {
           return (
-            <h4 key={index} className="font-display text-sm sm:text-base font-bold text-[#0B3321] pt-2">
+            <h4 key={index} className="font-display text-sm sm:text-base font-bold text-[#0B3321] dark:text-emerald-300 pt-2">
               {renderInlineFormatting(line.slice(4))}
             </h4>
           );
@@ -149,7 +150,7 @@ function FormattedSummary({ text }: { text: string }) {
         if (line.startsWith('## ') || line.startsWith('# ')) {
           const clean = line.replace(/^#{1,3}\s+/, '');
           return (
-            <h3 key={index} className="font-display text-base sm:text-lg font-bold text-slate-900 pt-2">
+            <h3 key={index} className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 pt-2">
               {renderInlineFormatting(clean)}
             </h3>
           );
@@ -157,7 +158,7 @@ function FormattedSummary({ text }: { text: string }) {
         if (/^[-*•]\s+/.test(line)) {
           return (
             <div key={index} className="flex items-start gap-2 pl-1">
-              <span className="mt-2 w-1.5 h-1.5 rounded-full bg-[#146C43] shrink-0" />
+              <span className="mt-2 w-1.5 h-1.5 rounded-full bg-[#146C43] dark:bg-emerald-400 shrink-0" />
               <p className="flex-1">{renderInlineFormatting(line.replace(/^[-*•]\s+/, ''))}</p>
             </div>
           );
@@ -167,7 +168,7 @@ function FormattedSummary({ text }: { text: string }) {
           if (match) {
             return (
               <div key={index} className="flex items-start gap-2 pl-1">
-                <span className="font-mono text-xs font-bold text-[#0B3321] mt-0.5 shrink-0">{match[1]}</span>
+                <span className="font-mono text-xs font-bold text-[#0B3321] dark:text-emerald-300 mt-0.5 shrink-0">{match[1]}</span>
                 <p className="flex-1">{renderInlineFormatting(match[2])}</p>
               </div>
             );
@@ -233,10 +234,12 @@ export function GeminiSummaryView({
   const [copied, setCopied] = useState(false);
   const [savedHistory, setSavedHistory] = useState<SavedSummaryEntry[]>(() => loadSavedSummaries());
 
-  // Chat State
+  // Chat State & Grounded Library Sources
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
+  const [attachedMaterialIds, setAttachedMaterialIds] = useState<string[]>([]);
+  const [libraryPickerQuery, setLibraryPickerQuery] = useState('');
 
   useEffect(() => {
     const first = campusDisciplines[0];
@@ -452,6 +455,23 @@ export function GeminiSummaryView({
     }
   };
 
+  const attachedMaterials = useMemo(
+    () => materials.filter((m) => attachedMaterialIds.includes(m.id)).slice(0, 3),
+    [materials, attachedMaterialIds]
+  );
+
+  const toggleAttachedMaterial = (materialId: string) => {
+    setAttachedMaterialIds((prev) => {
+      if (prev.includes(materialId)) {
+        return prev.filter((id) => id !== materialId);
+      }
+      if (prev.length >= 3) {
+        return [...prev.slice(1), materialId];
+      }
+      return [...prev, materialId];
+    });
+  };
+
   const handleSendChat = async (promptOverride?: string) => {
     const content = (promptOverride ?? chatInput).trim();
     if (!content || chatLoading) return;
@@ -463,21 +483,50 @@ export function GeminiSummaryView({
     setErrorMsg(null);
 
     try {
+      const libraryContext = attachedMaterials.map((m) => {
+        const matchedSummary = savedHistory.find((h) => h.title === m.title);
+        const excerptParts = [
+          m.editalTopic ? `Tópico do edital: ${m.editalTopic}` : '',
+          m.institution ? `Fonte/Instituição: ${m.institution}` : '',
+          m.description ? `Descrição: ${m.description}` : '',
+          m.keywords?.length ? `Palavras-chave: ${m.keywords.join(', ')}` : '',
+          matchedSummary?.summary ? `Resumo salvo: ${matchedSummary.summary.slice(0, 1200)}` : '',
+        ].filter(Boolean);
+        return {
+          title: m.title,
+          discipline: getDisciplineShortName(m.disciplineId),
+          url: m.url,
+          excerpt: excerptParts.join(' | '),
+        };
+      });
+
       const response = await fetch('/api/gemini/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: nextMessages,
+          messages: nextMessages.map((m) => ({ role: m.role, text: m.text })),
           contextTitle: activeResult?.title,
           contextSummary: activeResult?.summary,
           campus,
+          libraryContext,
         }),
       });
-      const data = (await response.json()) as { reply?: string; error?: string };
+      const data = (await response.json()) as {
+        reply?: string;
+        citedTitles?: string[];
+        error?: string;
+      };
       if (!response.ok || !data.reply) {
         throw new Error(data.error || 'Não foi possível obter resposta do Gemini.');
       }
-      setChatMessages((prev) => [...prev, { role: 'model', text: data.reply! }]);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: 'model',
+          text: data.reply!,
+          citedTitles: Array.isArray(data.citedTitles) ? data.citedTitles : undefined,
+        },
+      ]);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erro no chat com o Gemini.');
     } finally {
@@ -592,11 +641,11 @@ export function GeminiSummaryView({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-medium text-emerald-800 inline-flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-[#146C43]" />
+          <p className="text-xs font-medium text-emerald-800 dark:text-emerald-400 inline-flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-[#146C43] dark:text-emerald-400" />
             <span>Professor IA · Explicações, Flashcards, Mapas Mentais, Questões Inéditas e Resumos</span>
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 mt-0.5">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-0.5">
             Professor IA & Resumos Gemini
           </h1>
         </div>
@@ -605,7 +654,7 @@ export function GeminiSummaryView({
           href="https://gemini.google.com/"
           target="_blank"
           rel="noopener noreferrer"
-          className="min-h-[40px] px-3.5 py-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap w-fit"
+          className="min-h-[40px] px-3.5 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap w-fit"
         >
           <span>Abrir Gemini Web</span>
           <ExternalLink className="w-3.5 h-3.5" />
@@ -613,7 +662,7 @@ export function GeminiSummaryView({
       </div>
 
       {/* Mode Switcher */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-slate-200/70 rounded-2xl w-full lg:w-fit">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-slate-200/70 dark:bg-slate-800 rounded-2xl w-full lg:w-fit">
         {(
           [
             { id: 'professor', label: 'Professor IA', icon: Brain },
@@ -633,7 +682,9 @@ export function GeminiSummaryView({
                 setErrorMsg(null);
               }}
               className={`min-h-[42px] px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap ${
-                active ? 'bg-[#0B3321] text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                active
+                  ? 'bg-[#0B3321] text-white shadow-xs'
+                  : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <Icon className="w-4 h-4 shrink-0" />
@@ -644,14 +695,14 @@ export function GeminiSummaryView({
       </div>
 
       {errorMsg && (
-        <div role="alert" className="p-4 rounded-2xl bg-red-50 border border-red-200 text-xs sm:text-sm text-red-900">
+        <div role="alert" className="p-4 rounded-2xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 text-xs sm:text-sm text-red-900 dark:text-red-200">
           {errorMsg}
         </div>
       )}
 
       {/* TAB 0: PROFESSOR IA ESTRUTURADO */}
       {activeTab === 'professor' && (
-        <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5">
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 space-y-5">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold text-[#146C43]">Tutor Inteligente Baseado no Edital ALEPA 2026</p>
             <h2 className="font-display text-lg font-bold text-slate-900">
@@ -1117,43 +1168,111 @@ export function GeminiSummaryView({
 
       {/* TAB 3: CHAT DIRETO COM GEMINI */}
       {activeTab === 'chat' && (
-        <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-4">
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-[11px] font-semibold text-[#146C43]">Tutor de Estudos Gemini</p>
-              <h2 className="font-display text-lg font-bold text-slate-900">
-                Tirar dúvidas sobre o resumo ou matérias do Edital ALEPA
+              <p className="text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">Tutor de Estudos Gemini</p>
+              <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
+                Tirar dúvidas sobre materiais da biblioteca ou Edital ALEPA
               </h2>
             </div>
             {activeResult && (
-              <span className="text-xs px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-[#0B3321] font-medium truncate max-w-xs">
-                Contexto ativo: {activeResult.title}
+              <span className="text-xs px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[#0B3321] dark:text-emerald-200 font-medium truncate max-w-xs">
+                Resumo em foco: {activeResult.title}
               </span>
             )}
+          </div>
+
+          {/* Fontes da Biblioteca Selecionadas (Grounded AI Context) */}
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                  Fontes da Biblioteca Selecionadas ({attachedMaterials.length}/3)
+                </p>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                  Anexe até 3 PDFs ou apostilas da biblioteca para o Tutor IA fundamentar e citar nas respostas.
+                </p>
+              </div>
+              <input
+                type="search"
+                value={libraryPickerQuery}
+                onChange={(e) => setLibraryPickerQuery(e.target.value)}
+                placeholder="Filtrar material da biblioteca..."
+                className="min-h-[36px] px-3 py-1 text-xs bg-white dark:bg-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg sm:w-56"
+              />
+            </div>
+
+            {attachedMaterials.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {attachedMaterials.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => toggleAttachedMaterial(m.id)}
+                    className="min-h-[30px] px-2.5 py-1 rounded-lg bg-[#0B3321] text-white text-[11px] font-semibold inline-flex items-center gap-1.5"
+                  >
+                    <FileText className="w-3 h-3 shrink-0" />
+                    <span className="truncate max-w-[200px]">{m.title}</span>
+                    <span aria-hidden="true">×</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-36 overflow-y-auto pr-1">
+              {materials
+                .filter((m) => {
+                  const q = libraryPickerQuery.trim().toLowerCase();
+                  if (!q) return true;
+                  return `${m.title} ${m.editalTopic || ''} ${getDisciplineShortName(m.disciplineId)}`.toLowerCase().includes(q);
+                })
+                .slice(0, 12)
+                .map((m) => {
+                  const selected = attachedMaterialIds.includes(m.id);
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => toggleAttachedMaterial(m.id)}
+                      className={`text-left px-2.5 py-1.5 rounded-lg border text-[11px] transition-colors flex items-center justify-between gap-2 ${
+                        selected
+                          ? 'border-[#146C43] bg-emerald-50 dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-200 font-semibold'
+                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                      }`}
+                    >
+                      <span className="truncate">{m.title}</span>
+                      <span className="shrink-0 text-[10px] opacity-75">
+                        {selected ? 'Anexado' : '+ Anexar'}
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-1.5">
             {[
               'Explique o mnemônico LIMPE (Art. 37 CF) com exemplos práticos de prova.',
-              'Crie 5 questões objetivas estilo CETAP sobre o último resumo.',
+              'Crie 5 questões objetivas estilo CETAP sobre as fontes selecionadas.',
               'Faça um resumo relâmpago em 5 pontos para revisão antes da prova.',
             ].map((quickPrompt) => (
               <button
                 key={quickPrompt}
                 type="button"
                 onClick={() => void handleSendChat(quickPrompt)}
-                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-xs text-slate-800 text-left transition-colors"
+                className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 border border-slate-200 dark:border-slate-700 hover:border-emerald-300 text-xs text-slate-800 dark:text-slate-200 text-left transition-colors"
               >
                 {quickPrompt}
               </button>
             ))}
           </div>
 
-          <div className="space-y-3 max-h-[420px] overflow-y-auto p-3 rounded-xl bg-slate-50 border border-slate-200">
+          <div className="space-y-3 max-h-[420px] overflow-y-auto p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800">
             {chatMessages.length === 0 ? (
-              <div className="text-center py-8 text-xs text-slate-500 space-y-1">
+              <div className="text-center py-8 text-xs text-slate-500 dark:text-slate-400 space-y-1">
                 <BookOpen className="w-6 h-6 text-slate-400 mx-auto" />
-                <p>Pergunte qualquer dúvida jurídica, peça questões ou peça explicações sobre seu vídeo/PDF resumido.</p>
+                <p>Selecione fontes da biblioteca acima ou pergunte qualquer dúvida do Edital ALEPA.</p>
               </div>
             ) : (
               chatMessages.map((msg, idx) => (
@@ -1162,19 +1281,24 @@ export function GeminiSummaryView({
                   className={`p-3.5 rounded-xl text-sm ${
                     msg.role === 'user'
                       ? 'bg-[#0B3321] text-white ml-6 sm:ml-16'
-                      : 'bg-white border border-slate-200 text-slate-800 mr-2 sm:mr-10'
+                      : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 mr-2 sm:mr-10'
                   }`}
                 >
                   <p className="text-[10px] font-semibold uppercase tracking-wide opacity-75 mb-1">
-                    {msg.role === 'user' ? 'Você' : 'Gemini'}
+                    {msg.role === 'user' ? 'Você' : 'Professor IA · Gemini'}
                   </p>
                   {msg.role === 'user' ? <p>{msg.text}</p> : <FormattedSummary text={msg.text} />}
+                  {msg.role === 'model' && msg.citedTitles && msg.citedTitles.length > 0 && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-[#146C43] dark:text-emerald-400">
+                      Fontes consultadas: {msg.citedTitles.join(' · ')}
+                    </div>
+                  )}
                 </div>
               ))
             )}
             {chatLoading && (
-              <div className="flex items-center gap-2 text-xs text-slate-600 p-2">
-                <Loader2 className="w-4 h-4 animate-spin text-[#0B3321]" />
+              <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 p-2">
+                <Loader2 className="w-4 h-4 animate-spin text-[#0B3321] dark:text-emerald-400" />
                 <span>Gemini elaborando resposta...</span>
               </div>
             )}
@@ -1191,8 +1315,8 @@ export function GeminiSummaryView({
               type="text"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Pergunte ao Gemini sobre o vídeo, PDF ou matéria do concurso..."
-              className="flex-1 min-h-[44px] px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
+              placeholder="Pergunte ao Gemini sobre as fontes selecionadas, vídeo, PDF ou edital..."
+              className="flex-1 min-h-[44px] px-3.5 py-2 text-sm border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
             />
             <button
               type="submit"
@@ -1208,7 +1332,7 @@ export function GeminiSummaryView({
 
       {/* GENERATED SUMMARY OUTPUT */}
       {activeResult && (
-        <section className="bg-white border-2 border-emerald-200 rounded-2xl p-5 sm:p-6 space-y-4">
+        <section className="bg-white dark:bg-slate-900 border-2 border-emerald-200 dark:border-emerald-800 rounded-2xl p-5 sm:p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-[#146C43] inline-flex items-center gap-1.5">

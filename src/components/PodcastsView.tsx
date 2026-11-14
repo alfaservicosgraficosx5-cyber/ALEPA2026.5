@@ -304,18 +304,18 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-medium text-emerald-800">
+          <p className="text-xs font-medium text-emerald-800 dark:text-emerald-400">
             {isMedio
               ? 'ALEPA 2026 – Nível Médio · Cargo 04 – Assistência Administrativa (PL.AL.060) · Múltiplos episódios por disciplina'
               : 'ALEPA 2026 – Nível Superior · Cargo 03 – Técnico Legislativo (PL.AL.102) · Múltiplos episódios por disciplina'}
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 mt-1">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1">
             Podcasts & Aulas em Áudio ({isMedio ? 'Nível Médio' : 'Nível Superior'})
           </h1>
         </div>
 
-        <div className="text-xs font-mono tabular-nums text-slate-600">
-          Total cadastrado: <strong className="text-slate-900">{allPodcasts.length}</strong>{' '}
+        <div className="text-xs font-mono tabular-nums text-slate-600 dark:text-slate-400">
+          Total cadastrado: <strong className="text-slate-900 dark:text-slate-100">{allPodcasts.length}</strong>{' '}
           {allPodcasts.length === 1 ? 'podcast' : 'podcasts'}
         </div>
       </div>
@@ -412,14 +412,14 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
       />
 
       {/* Add Multiple Podcasts Form */}
-      <section id="podcast-add-form" className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4">
+      <section id="podcast-add-form" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4">
         <div className="flex items-start gap-3">
-          <Headphones className="w-5 h-5 text-[#0B3321] shrink-0 mt-0.5" />
+          <Headphones className="w-5 h-5 text-[#0B3321] dark:text-emerald-400 shrink-0 mt-0.5" />
           <div>
-            <h2 className="font-display text-lg font-bold text-slate-900">
+            <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
               Cadastrar Novo Link de Podcast por Disciplina
             </h2>
-            <p className="text-xs text-slate-600 mt-0.5">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
               Adicione quantos episódios quiser por disciplina (Spotify, YouTube, Apple Podcasts, Deezer, Google Drive
               ou MP3). Todos ficam salvos na sua conta em nuvem.
             </p>
@@ -429,14 +429,14 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
         <form onSubmit={handleAddPodcast} className="space-y-3.5">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label htmlFor="pod-cat" className="block text-xs font-medium text-slate-700 mb-1">
+              <label htmlFor="pod-cat" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Disciplina / Categoria ({isMedio ? 'Nível Médio · 1–11' : 'Nível Superior · 1–10'})
               </label>
               <select
                 id="pod-cat"
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value as LibraryCategoryId)}
-                className="w-full min-h-[42px] px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl"
+                className="w-full min-h-[42px] px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-xl"
               >
                 {activeCategories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -447,7 +447,7 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
             </div>
 
             <div>
-              <label htmlFor="pod-title" className="block text-xs font-medium text-slate-700 mb-1">
+              <label htmlFor="pod-title" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Título do episódio / podcast
               </label>
               <input
@@ -456,12 +456,12 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Ex.: Ep. 04 – Comissões e Quóruns na ALEPA"
-                className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                className="w-full min-h-[42px] px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-xl"
               />
             </div>
 
             <div>
-              <label htmlFor="pod-url" className="block text-xs font-medium text-slate-700 mb-1">
+              <label htmlFor="pod-url" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Link do podcast
               </label>
               <input
@@ -471,14 +471,14 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
                 value={podcastUrl}
                 onChange={(e) => setPodcastUrl(e.target.value)}
                 placeholder="https://open.spotify.com/episode/... ou https://youtu.be/..."
-                className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                className="w-full min-h-[42px] px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-xl"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label htmlFor="pod-topic" className="block text-xs font-medium text-slate-700 mb-1">
+              <label htmlFor="pod-topic" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Tópico do edital (opcional)
               </label>
               <input
@@ -486,12 +486,12 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
                 value={editalTopic}
                 onChange={(e) => setEditalTopic(e.target.value)}
                 placeholder="Ex.: Tramitação de proposições e LC 95/98"
-                className="w-full min-h-[40px] px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                className="w-full min-h-[40px] px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-xl"
               />
             </div>
 
             <div>
-              <label htmlFor="pod-channel" className="block text-xs font-medium text-slate-700 mb-1">
+              <label htmlFor="pod-channel" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Canal / Programa (opcional)
               </label>
               <input
@@ -499,12 +499,12 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
                 value={channelName}
                 onChange={(e) => setChannelName(e.target.value)}
                 placeholder="Ex.: Rádio Senado / Spotify Direito"
-                className="w-full min-h-[40px] px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                className="w-full min-h-[40px] px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-xl"
               />
             </div>
 
             <div>
-              <label htmlFor="pod-notes" className="block text-xs font-medium text-slate-700 mb-1">
+              <label htmlFor="pod-notes" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Observação rápida (opcional)
               </label>
               <input
@@ -512,14 +512,14 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Ex.: Ouvir no deslocamento · 25 min"
-                className="w-full min-h-[40px] px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                className="w-full min-h-[40px] px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-xl"
               />
             </div>
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
             <div className="flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+              <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={isOfficial}
@@ -529,7 +529,7 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
               </label>
 
               {canPublishShared && (
-                <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={isShared}
@@ -552,7 +552,7 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
         </form>
 
         {feedback && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-4 py-2.5 text-xs font-medium">
+          <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 rounded-xl px-4 py-2.5 text-xs font-medium">
             {feedback}
           </div>
         )}
@@ -567,7 +567,7 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
             className={`min-h-[36px] px-3 py-1.5 text-xs font-medium rounded-xl border transition-colors ${
               selectedCategory === 'all'
                 ? 'bg-[#0B3321] border-[#0B3321] text-white'
-                : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
             }`}
           >
             Todas ({allPodcasts.length})
@@ -584,7 +584,7 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
                 className={`min-h-[36px] px-3 py-1.5 text-xs font-medium rounded-xl border transition-colors ${
                   isSelected
                     ? 'bg-[#0B3321] border-[#0B3321] text-white'
-                    : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
                 }`}
               >
                 {String(cat.order).padStart(2, '0')} · {cat.title.split(' e ')[0]}{' '}
@@ -594,7 +594,7 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
           })}
         </div>
 
-        <label className="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer shrink-0">
+        <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer shrink-0">
           <input
             type="checkbox"
             checked={showEmptyDisciplines}
@@ -611,33 +611,33 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
           return (
             <section
               key={cat.id}
-              className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4"
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4"
             >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
                 <div>
-                  <div className="flex items-center gap-2 text-xs font-mono text-[#0B3321] font-semibold tabular-nums">
+                  <div className="flex items-center gap-2 text-xs font-mono text-[#0B3321] dark:text-emerald-400 font-semibold tabular-nums">
                     <span>{String(cat.order).padStart(2, '0')}</span>
                     <span aria-hidden="true">·</span>
                     <span>
                       {list.length} {list.length === 1 ? 'podcast cadastrado' : 'podcasts cadastrados'}
                     </span>
                   </div>
-                  <h2 className="font-display text-lg font-bold text-slate-900 mt-0.5">{cat.title}</h2>
-                  <p className="text-xs text-slate-500">{cat.description}</p>
+                  <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100 mt-0.5">{cat.title}</h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{cat.description}</p>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => handleFocusDisciplineForm(cat.id)}
-                  className="min-h-[38px] px-3.5 py-1.5 border border-slate-300 hover:border-[#0B3321] bg-white text-slate-800 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                  className="min-h-[38px] px-3.5 py-1.5 border border-slate-300 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
                 >
-                  <Plus className="w-3.5 h-3.5 text-[#146C43]" />
+                  <Plus className="w-3.5 h-3.5 text-[#146C43] dark:text-emerald-400" />
                   <span>Adicionar podcast aqui</span>
                 </button>
               </div>
 
               {list.length === 0 ? (
-                <p className="text-xs text-slate-500 py-2">
+                <p className="text-xs text-slate-500 dark:text-slate-400 py-2">
                   Nenhum podcast vinculado a esta disciplina ainda. Clique em "Adicionar podcast aqui" para incluir o
                   primeiro episódio.
                 </p>
@@ -653,36 +653,36 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
                         key={pod.id}
                         className={`rounded-xl border p-4 flex flex-col justify-between gap-3 transition-colors ${
                           isPlaying
-                            ? 'border-[#0B3321] bg-emerald-50/40'
-                            : 'border-slate-200 bg-slate-50/40'
+                            ? 'border-[#0B3321] dark:border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/40'
+                            : 'border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-800/60'
                         }`}
                       >
                         <div className="space-y-1.5">
-                          <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
-                            <span className="font-mono font-semibold text-[#0B3321] tabular-nums">
+                          <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                            <span className="font-mono font-semibold text-[#0B3321] dark:text-emerald-400 tabular-nums">
                               #{String(idx + 1).padStart(2, '0')} · {platform}
                             </span>
                             <span
                               className={
-                                pod.isOfficialContent ? 'font-semibold text-[#146C43]' : 'text-slate-600'
+                                pod.isOfficialContent ? 'font-semibold text-[#146C43] dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'
                               }
                             >
                               {pod.isOfficialContent ? 'Oficial' : 'Complementar'}
                             </span>
                           </div>
 
-                          <h3 className="font-display text-base font-bold text-slate-900">{pod.title}</h3>
+                          <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">{pod.title}</h3>
                           {pod.editalTopic && (
-                            <p className="text-xs text-slate-600">
-                              <span className="font-medium text-slate-700">Assunto:</span> {pod.editalTopic}
+                            <p className="text-xs text-slate-600 dark:text-slate-400">
+                              <span className="font-medium text-slate-700 dark:text-slate-300">Assunto:</span> {pod.editalTopic}
                             </p>
                           )}
                           {pod.description && (
-                            <p className="text-xs text-slate-500 line-clamp-2">{pod.description}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{pod.description}</p>
                           )}
                         </div>
 
-                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/70">
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-700">
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
@@ -697,7 +697,7 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
                               href={pod.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="min-h-[36px] px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-medium rounded-lg inline-flex items-center gap-1.5"
+                              className="min-h-[36px] px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-medium rounded-lg inline-flex items-center gap-1.5"
                             >
                               <span>Abrir link</span>
                               <ExternalLink className="w-3.5 h-3.5" />
@@ -712,7 +712,7 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
                                 void deleteMaterial(pod.id);
                               }}
                               aria-label="Excluir podcast"
-                              className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50"
+                              className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  Bookmark,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -21,13 +22,15 @@ import {
   ErrorReason,
   MedioCargoGroup,
   Question,
+  QuestionDifficulty,
   QuestionOriginType,
   SimuladoList,
 } from '../types';
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E'] as const;
 
-type OriginFilter = 'all' | 'official' | 'training';
+type OriginFilter = 'all' | 'official' | 'training' | 'ai';
+type DifficultyFilter = 'all' | QuestionDifficulty;
 type GeneratorStrategy = 'proportional' | 'balanced';
 
 const ORIGIN_LABELS: Record<QuestionOriginType, string> = {
@@ -57,6 +60,8 @@ export function SimuladosView({
   const {
     questions,
     simuladoLists,
+    preferences,
+    toggleFavoriteQuestion,
     saveSimuladoAttempt,
     addErrorEntry,
     addCustomQuestion,
@@ -105,6 +110,8 @@ export function SimuladosView({
 
   const [disciplineFilter, setDisciplineFilter] = useState<string>('all');
   const [originFilter, setOriginFilter] = useState<OriginFilter>('all');
+  const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('all');
+  const [onlyFavorites, setOnlyFavorites] = useState<boolean>(false);
   const [mode, setMode] = useState<'treino' | 'simulado'>('treino');
   const [activeDeck, setActiveDeck] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -128,18 +135,32 @@ export function SimuladosView({
   const [qExplanation, setQExplanation] = useState('');
   const [qLegalBasis, setQLegalBasis] = useState('');
   const [qOriginType, setQOriginType] = useState<QuestionOriginType>('training_platform');
+  const [qDifficulty, setQDifficulty] = useState<QuestionDifficulty>('intermediario');
   const [qPublishClass, setQPublishClass] = useState(false);
+
+  const favoriteQuestionIds = preferences.favoriteQuestionIds || [];
+
+  const matchesOriginFilter = (q: Question, origin: OriginFilter): boolean => {
+    if (origin === 'all') return true;
+    const isAi = q.originType === 'ai_generated';
+    if (origin === 'ai') return isAi;
+    const isOff = Boolean(q.isOfficial) && !isAi;
+    if (origin === 'official') return isOff;
+    return !isOff && !isAi;
+  };
 
   const startSession = (
     selectedDisc: string,
     selectedOrigin: OriginFilter,
-    selectedMode: 'treino' | 'simulado'
+    selectedMode: 'treino' | 'simulado',
+    selectedDiff: DifficultyFilter = difficultyFilter,
+    favOnly: boolean = onlyFavorites
   ) => {
     const pool = campusQuestions.filter((q) => {
       if (selectedDisc !== 'all' && q.disciplineId !== selectedDisc) return false;
-      const isOff = Boolean(q.isOfficial);
-      if (selectedOrigin === 'official' && !isOff) return false;
-      if (selectedOrigin === 'training' && isOff) return false;
+      if (!matchesOriginFilter(q, selectedOrigin)) return false;
+      if (selectedDiff !== 'all' && (q.difficulty || 'intermediario') !== selectedDiff) return false;
+      if (favOnly && !favoriteQuestionIds.includes(q.id)) return false;
       return true;
     });
     const deck = selectedMode === 'simulado' ? pool.slice(0, 20) : pool;
@@ -158,7 +179,7 @@ export function SimuladosView({
     setDisciplineFilter('all');
     setQDisc(activeDisciplines[0]?.id || (isMedio ? 'nm_portugues' : 'processo_legislativo'));
     setGenSelectedDiscs(activeDisciplines.map((d) => d.id));
-    startSession('all', originFilter, mode);
+    startSession('all', originFilter, mode, difficultyFilter, onlyFavorites);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campus, medioCargoGroup, campusQuestions.length]);
 
@@ -167,9 +188,7 @@ export function SimuladosView({
     const selectedDiscObjects = activeDisciplines.filter((d) => selectedSet.has(d.id));
     const filteredPool = campusQuestions.filter((q) => {
       if (!selectedSet.has(q.disciplineId)) return false;
-      const isOff = Boolean(q.isOfficial);
-      if (genOrigin === 'official' && !isOff) return false;
-      if (genOrigin === 'training' && isOff) return false;
+      if (!matchesOriginFilter(q, genOrigin)) return false;
       return true;
     });
 
@@ -470,7 +489,7 @@ export function SimuladosView({
   const handleCreateQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const isOfficial = qOriginType !== 'training_platform';
+      const isOfficial = qOriginType !== 'training_platform' && qOriginType !== 'ai_generated';
       await addCustomQuestion({
         disciplineId: qDisc,
         topicTitle: qTopic,
@@ -481,6 +500,7 @@ export function SimuladosView({
         legalBasis: qLegalBasis,
         source: ORIGIN_LABELS[qOriginType],
         originType: qOriginType,
+        difficulty: qDifficulty,
         isOfficial,
         isPublished: qPublishClass,
       });
@@ -490,7 +510,7 @@ export function SimuladosView({
       setQOptions(['', '', '', '', '']);
       setQExplanation('');
       setQLegalBasis('');
-      setSaveFeedback('Nova questão adicionada com identificação de origem!');
+      setSaveFeedback('Nova questão adicionada com identificação de origem e dificuldade!');
     } catch (err) {
       setSaveFeedback(err instanceof Error ? err.message : 'Erro ao criar questão.');
     }
@@ -504,19 +524,20 @@ export function SimuladosView({
 
   const answeredCount = activeDeck.filter((q) => answers[q.id] !== undefined).length;
   const correctTotal = activeDeck.filter((q) => answers[q.id] === q.correctIndex).length;
-  const officialCount = campusQuestions.filter((q) => q.isOfficial).length;
-  const trainingCount = campusQuestions.length - officialCount;
+  const aiCount = campusQuestions.filter((q) => q.originType === 'ai_generated').length;
+  const officialCount = campusQuestions.filter((q) => q.isOfficial && q.originType !== 'ai_generated').length;
+  const trainingCount = campusQuestions.length - officialCount - aiCount;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-medium text-emerald-800">
+          <p className="text-xs font-medium text-emerald-800 dark:text-emerald-400">
             {isMedio
               ? `ALEPA 2026 – Nível Médio · ${activeCargoInfo.shortTitle} (${activeCargoInfo.code}) · Banco Independente`
               : 'ALEPA 2026 – Nível Superior · Cargo 03 – Técnico Legislativo (PL.AL.102) · Banco Independente'}
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 mt-1">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1">
             Banco de Questões e Simulados ({isMedio ? 'Nível Médio' : 'Nível Superior'})
           </h1>
         </div>
@@ -526,7 +547,7 @@ export function SimuladosView({
             type="button"
             disabled={generatingAiDeck}
             onClick={() => void handleGenerateAiQuestionsDeck()}
-            className="min-h-[44px] px-3.5 py-2 bg-[#E8F3EC] hover:bg-emerald-100 text-[#0B3321] border border-emerald-200 text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-3.5 py-2 bg-[#E8F3EC] dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-[#0B3321] dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800 text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
           >
             {generatingAiDeck ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             <span>{generatingAiDeck ? 'Gerando IA...' : '3 Questões IA'}</span>
@@ -544,47 +565,47 @@ export function SimuladosView({
       </div>
 
       {/* Separação de Simulados por Cargo + Quantidade de Questões na Prova */}
-      <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold text-[#146C43]">
+            <p className="text-xs font-semibold text-[#146C43] dark:text-emerald-400">
               {isMedio
                 ? `Simulado separado por cargo · Nível Médio (${activeCargoInfo.cargoNumber} – ${activeCargoInfo.code})`
                 : 'Simulado separado por cargo · Nível Superior (Cargo 03 – PL.AL.102)'}
             </p>
-            <p className="text-xs text-slate-600 mt-0.5">
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
               {isMedio
                 ? 'Questões e simulados isolados para o Edital 001/2026 (Ensino Médio Completo), respeitando o conteúdo e o nível de cobrança da Fundação CETAP.'
                 : 'Questões e simulados isolados para o Edital 002/2026 (Ensino Superior), respeitando o aprofundamento técnico do Cargo 03.'}
             </p>
           </div>
           <div className="text-left sm:text-right font-mono tabular-nums shrink-0">
-            <span className="text-sm font-bold text-[#0B3321]">50 questões objetivas</span>
-            <p className="text-[11px] text-slate-500">Valor total: 10,0 pontos (0,20 pt/questão)</p>
+            <span className="text-sm font-bold text-[#0B3321] dark:text-emerald-300">50 questões objetivas</span>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">Valor total: 10,0 pontos (0,20 pt/questão)</p>
           </div>
         </div>
 
         {isMedio && (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2 border-t border-slate-100 text-xs">
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-              <p className="font-mono font-bold text-[#0B3321]">20 questões</p>
-              <p className="text-[11px] text-slate-600 mt-0.5">Conhec. Específicos (4,0 pts)</p>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+              <p className="font-mono font-bold text-[#0B3321] dark:text-emerald-300">20 questões</p>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">Conhec. Específicos (4,0 pts)</p>
             </div>
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-              <p className="font-mono font-bold text-[#0B3321]">10 questões</p>
-              <p className="text-[11px] text-slate-600 mt-0.5">Legislação e Ética (2,0 pts)</p>
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+              <p className="font-mono font-bold text-[#0B3321] dark:text-emerald-300">10 questões</p>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">Legislação e Ética (2,0 pts)</p>
             </div>
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-              <p className="font-mono font-bold text-[#0B3321]">10 questões</p>
-              <p className="text-[11px] text-slate-600 mt-0.5">Língua Portuguesa (2,0 pts)</p>
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+              <p className="font-mono font-bold text-[#0B3321] dark:text-emerald-300">10 questões</p>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">Língua Portuguesa (2,0 pts)</p>
             </div>
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-              <p className="font-mono font-bold text-[#0B3321]">05 questões</p>
-              <p className="text-[11px] text-slate-600 mt-0.5">Raciocínio Lógico (1,0 pt)</p>
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+              <p className="font-mono font-bold text-[#0B3321] dark:text-emerald-300">05 questões</p>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">Raciocínio Lógico (1,0 pt)</p>
             </div>
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-              <p className="font-mono font-bold text-[#0B3321]">05 questões</p>
-              <p className="text-[11px] text-slate-600 mt-0.5">Noções de Informática (1,0 pt)</p>
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+              <p className="font-mono font-bold text-[#0B3321] dark:text-emerald-300">05 questões</p>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">Noções de Informática (1,0 pt)</p>
             </div>
           </div>
         )}
@@ -592,29 +613,29 @@ export function SimuladosView({
 
       {/* Simulados e Listas Oficiais Publicados pela Coordenação */}
       {publishedSimuladoLists.length > 0 && (
-        <section className="bg-white border border-emerald-200 rounded-2xl p-5 sm:p-6 space-y-3">
+        <section className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900 rounded-2xl p-5 sm:p-6 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <p className="text-xs font-semibold text-[#146C43]">Listas Oficiais Publicadas</p>
-              <h2 className="font-display text-lg font-bold text-slate-900">
+              <p className="text-xs font-semibold text-[#146C43] dark:text-emerald-400">Listas Oficiais Publicadas</p>
+              <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
                 Simulados & Baterias Recomendadas do Campus
               </h2>
             </div>
-            <span className="text-xs font-mono text-slate-600">{publishedSimuladoLists.length} disponíveis</span>
+            <span className="text-xs font-mono text-slate-600 dark:text-slate-400">{publishedSimuladoLists.length} disponíveis</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {publishedSimuladoLists.map((list) => (
               <div
                 key={list.id}
-                className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 flex flex-col justify-between gap-3"
+                className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60 flex flex-col justify-between gap-3"
               >
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between gap-2 text-[11px] font-mono text-[#146C43] font-semibold">
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-mono text-[#146C43] dark:text-emerald-400 font-semibold">
                     <span>{list.questionIds.length} questões</span>
                     <span>{list.durationMinutes} min recomendados</span>
                   </div>
-                  <h3 className="text-sm font-bold text-slate-900">{list.title}</h3>
-                  {list.description && <p className="text-xs text-slate-600 leading-relaxed">{list.description}</p>}
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{list.title}</h3>
+                  {list.description && <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{list.description}</p>}
                 </div>
                 <button
                   type="button"
@@ -630,14 +651,14 @@ export function SimuladosView({
       )}
 
       {/* Gerador Automático de Simulados por Conteúdo Programático do Cargo */}
-      <section className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
           <div>
-            <div className="flex items-center gap-2 text-[#146C43]">
+            <div className="flex items-center gap-2 text-[#146C43] dark:text-emerald-400">
               <Sparkles className="w-4 h-4" />
               <p className="text-xs font-semibold">Gerador Automático · Baseado no Conteúdo Programático</p>
             </div>
-            <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900 mt-0.5">
+            <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 mt-0.5">
               Montar Simulado Personalizado ({activeCargoLabel})
             </h2>
           </div>
@@ -645,7 +666,7 @@ export function SimuladosView({
           <button
             type="button"
             onClick={() => setGeneratorOpen((v) => !v)}
-            className="min-h-[38px] px-3.5 py-1.5 border border-slate-300 hover:border-[#0B3321] bg-slate-50 text-slate-800 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap self-start sm:self-auto"
+            className="min-h-[38px] px-3.5 py-1.5 border border-slate-300 dark:border-slate-700 hover:border-[#0B3321] bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap self-start sm:self-auto"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
             <span>{generatorOpen ? 'Recolher gerador' : 'Abrir gerador automático'}</span>
@@ -949,18 +970,20 @@ export function SimuladosView({
       </section>
 
       {/* Controls Bar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col gap-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
+            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
               <button
                 type="button"
                 onClick={() => {
                   setMode('treino');
-                  startSession(disciplineFilter, originFilter, 'treino');
+                  startSession(disciplineFilter, originFilter, 'treino', difficultyFilter, onlyFavorites);
                 }}
                 className={`min-h-[38px] px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
-                  mode === 'treino' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
+                  mode === 'treino'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300'
                 }`}
               >
                 Modo Treino (Comentado)
@@ -969,25 +992,29 @@ export function SimuladosView({
                 type="button"
                 onClick={() => {
                   setMode('simulado');
-                  startSession(disciplineFilter, originFilter, 'simulado');
+                  startSession(disciplineFilter, originFilter, 'simulado', difficultyFilter, onlyFavorites);
                 }}
                 className={`min-h-[38px] px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
-                  mode === 'simulado' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
+                  mode === 'simulado'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300'
                 }`}
               >
                 Simulado Cronometrado
               </button>
             </div>
 
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
+            <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
               <button
                 type="button"
                 onClick={() => {
                   setOriginFilter('all');
-                  startSession(disciplineFilter, 'all', mode);
+                  startSession(disciplineFilter, 'all', mode, difficultyFilter, onlyFavorites);
                 }}
                 className={`min-h-[38px] px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
-                  originFilter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
+                  originFilter === 'all'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300'
                 }`}
               >
                 Todas ({campusQuestions.length})
@@ -996,10 +1023,12 @@ export function SimuladosView({
                 type="button"
                 onClick={() => {
                   setOriginFilter('official');
-                  startSession(disciplineFilter, 'official', mode);
+                  startSession(disciplineFilter, 'official', mode, difficultyFilter, onlyFavorites);
                 }}
                 className={`min-h-[38px] px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
-                  originFilter === 'official' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
+                  originFilter === 'official'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300'
                 }`}
               >
                 Oficiais ({officialCount})
@@ -1008,26 +1037,42 @@ export function SimuladosView({
                 type="button"
                 onClick={() => {
                   setOriginFilter('training');
-                  startSession(disciplineFilter, 'training', mode);
+                  startSession(disciplineFilter, 'training', mode, difficultyFilter, onlyFavorites);
                 }}
                 className={`min-h-[38px] px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
-                  originFilter === 'training' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
+                  originFilter === 'training'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300'
                 }`}
               >
-                Não oficiais / Treino ({trainingCount})
+                Treino ({trainingCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOriginFilter('ai');
+                  startSession(disciplineFilter, 'ai', mode, difficultyFilter, onlyFavorites);
+                }}
+                className={`min-h-[38px] px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
+                  originFilter === 'ai'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300'
+                }`}
+              >
+                Inéditas IA ({aiCount})
               </button>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <select
               aria-label="Filtrar questões por disciplina"
               value={disciplineFilter}
               onChange={(e) => {
                 setDisciplineFilter(e.target.value);
-                startSession(e.target.value, originFilter, mode);
+                startSession(e.target.value, originFilter, mode, difficultyFilter, onlyFavorites);
               }}
-              className="min-h-[40px] px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-xl"
+              className="min-h-[40px] px-3 py-1.5 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl"
             >
               <option value="all">Todas as disciplinas ({campusQuestions.length})</option>
               {activeDisciplines.map((d) => (
@@ -1037,9 +1082,42 @@ export function SimuladosView({
               ))}
             </select>
 
-            <div className="flex items-center gap-3 text-xs font-mono tabular-nums text-slate-600">
+            <select
+              aria-label="Filtrar questões por dificuldade"
+              value={difficultyFilter}
+              onChange={(e) => {
+                const nextDiff = e.target.value as DifficultyFilter;
+                setDifficultyFilter(nextDiff);
+                startSession(disciplineFilter, originFilter, mode, nextDiff, onlyFavorites);
+              }}
+              className="min-h-[40px] px-3 py-1.5 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl"
+            >
+              <option value="all">Qualquer dificuldade</option>
+              <option value="basico">Nível Básico</option>
+              <option value="intermediario">Nível Intermediário</option>
+              <option value="avancado">Nível Avançado</option>
+            </select>
+
+            <button
+              type="button"
+              onClick={() => {
+                const nextFav = !onlyFavorites;
+                setOnlyFavorites(nextFav);
+                startSession(disciplineFilter, originFilter, mode, difficultyFilter, nextFav);
+              }}
+              className={`min-h-[40px] px-3 py-1.5 text-xs font-semibold rounded-xl border inline-flex items-center gap-1.5 whitespace-nowrap ${
+                onlyFavorites
+                  ? 'border-amber-500 bg-amber-50 text-amber-900 dark:border-amber-500 dark:bg-amber-950/60 dark:text-amber-200'
+                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200'
+              }`}
+            >
+              <Bookmark className={`w-3.5 h-3.5 ${onlyFavorites ? 'fill-current' : ''}`} />
+              <span>Favoritas ({campusQuestions.filter((q) => favoriteQuestionIds.includes(q.id)).length})</span>
+            </button>
+
+            <div className="flex items-center gap-3 text-xs font-mono tabular-nums text-slate-600 dark:text-slate-300">
               <span className="inline-flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-slate-500" />
+                <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                 {formatDuration(secondsElapsed)}
               </span>
               <span>
@@ -1047,8 +1125,8 @@ export function SimuladosView({
               </span>
               <button
                 type="button"
-                onClick={() => startSession(disciplineFilter, originFilter, mode)}
-                className="min-h-[36px] px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-sans font-medium inline-flex items-center gap-1"
+                onClick={() => startSession(disciplineFilter, originFilter, mode, difficultyFilter, onlyFavorites)}
+                className="min-h-[36px] px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-sans font-medium inline-flex items-center gap-1"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Reiniciar</span>
@@ -1059,7 +1137,7 @@ export function SimuladosView({
       </div>
 
       {saveFeedback && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-4 py-3 text-sm font-medium">
+        <div className="bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 rounded-xl px-4 py-3 text-sm font-medium">
           {saveFeedback}
         </div>
       )}
@@ -1076,7 +1154,7 @@ export function SimuladosView({
           </div>
           <button
             type="button"
-            onClick={() => startSession(disciplineFilter, originFilter, mode)}
+            onClick={() => startSession(disciplineFilter, originFilter, mode, difficultyFilter, onlyFavorites)}
             className="min-h-[44px] px-4 py-2 bg-white text-slate-900 text-sm font-semibold rounded-xl whitespace-nowrap"
           >
             Novo simulado
@@ -1086,7 +1164,7 @@ export function SimuladosView({
 
       {/* Navigator Strip */}
       {activeDeck.length > 1 && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-3 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {activeDeck.map((q, idx) => {
             const isCurr = idx === currentIndex;
             const isAns = answers[q.id] !== undefined;
@@ -1101,10 +1179,10 @@ export function SimuladosView({
                   isCurr
                     ? 'bg-[#0B3321] text-white border-[#0B3321]'
                     : isFlag
-                      ? 'bg-amber-100 text-amber-900 border-amber-400'
+                      ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 border-amber-400'
                       : isAns
-                        ? 'bg-[#E8F3EC] text-[#0B3321] border-emerald-300'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        ? 'bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-200 border-emerald-300 dark:border-emerald-700'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
                 }`}
               >
                 {idx + 1}
@@ -1116,19 +1194,42 @@ export function SimuladosView({
 
       {/* Question Card */}
       {currentQuestion ? (
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-8 space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 pb-4 border-b border-slate-100">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-8 space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold text-slate-800">
+              <span className="font-semibold text-slate-800 dark:text-slate-100">
                 Questão {currentIndex + 1} de {activeDeck.length}
               </span>
               <span aria-hidden="true">·</span>
               <span>{getDisciplineShortName(currentQuestion.disciplineId)}</span>
               <span aria-hidden="true">·</span>
               <span>{currentQuestion.topicTitle}</span>
+              <span aria-hidden="true">·</span>
+              <span>
+                {currentQuestion.difficulty === 'basico'
+                  ? 'Básico'
+                  : currentQuestion.difficulty === 'avancado'
+                    ? 'Avançado'
+                    : 'Intermediário'}
+              </span>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 font-medium">
+              <button
+                type="button"
+                onClick={() => void toggleFavoriteQuestion(currentQuestion.id)}
+                className={`min-h-[32px] px-2.5 py-1 rounded-lg border text-xs inline-flex items-center gap-1 ${
+                  favoriteQuestionIds.includes(currentQuestion.id)
+                    ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-400 text-amber-800 dark:text-amber-200 font-semibold'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <Bookmark
+                  className={`w-3 h-3 ${favoriteQuestionIds.includes(currentQuestion.id) ? 'fill-current' : ''}`}
+                />
+                <span>{favoriteQuestionIds.includes(currentQuestion.id) ? 'Favorita' : 'Favoritar'}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() =>
@@ -1136,8 +1237,8 @@ export function SimuladosView({
                 }
                 className={`min-h-[32px] px-2.5 py-1 rounded-lg border text-xs inline-flex items-center gap-1 ${
                   flaggedIds[currentQuestion.id]
-                    ? 'bg-amber-100 border-amber-400 text-amber-900 font-semibold'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? 'bg-amber-100 dark:bg-amber-950/60 border-amber-400 text-amber-900 dark:text-amber-200 font-semibold'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
                 }`}
               >
                 <Flag className="w-3 h-3" />
@@ -1145,23 +1246,23 @@ export function SimuladosView({
               </button>
 
               {currentQuestion.originType === 'ai_generated' ? (
-                <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 font-semibold">
+                <span className="text-amber-800 dark:text-amber-300 font-semibold">
                   Gerada por IA (Treino)
                 </span>
               ) : currentQuestion.isOfficial ? (
-                <span className="inline-flex items-center gap-1 text-[#146C43]">
+                <span className="inline-flex items-center gap-1 text-[#146C43] dark:text-emerald-400">
                   <ShieldCheck className="w-3.5 h-3.5" />
                   <span>{currentQuestion.source || 'Fonte Oficial'}</span>
                 </span>
               ) : (
-                <span className="text-amber-800">
+                <span className="text-amber-800 dark:text-amber-300">
                   {currentQuestion.source || 'Treinamento Complementar (Não oficial)'}
                 </span>
               )}
             </div>
           </div>
 
-          <p className="text-base sm:text-lg text-slate-900 leading-relaxed font-medium">
+          <p className="text-base sm:text-lg text-slate-900 dark:text-slate-100 leading-relaxed font-medium">
             {currentQuestion.statement}
           </p>
 
@@ -1171,15 +1272,16 @@ export function SimuladosView({
               const showCorrection = submitted || (mode === 'treino' && selectedAnswer !== undefined);
               const isCorrectOption = idx === currentQuestion.correctIndex;
 
-              let btnStyle = 'border-slate-200 bg-white hover:bg-slate-50 text-slate-800';
+              let btnStyle =
+                'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/70 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100';
               if (showCorrection) {
                 if (isCorrectOption) {
-                  btnStyle = 'border-emerald-600 bg-emerald-50 text-emerald-950';
+                  btnStyle = 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-950 dark:text-emerald-100';
                 } else if (isSelected && !isCorrectOption) {
-                  btnStyle = 'border-red-500 bg-red-50 text-red-950';
+                  btnStyle = 'border-red-500 bg-red-50 dark:bg-red-950/60 text-red-950 dark:text-red-100';
                 }
               } else if (isSelected) {
-                btnStyle = 'border-[#0B3321] bg-slate-900 text-white';
+                btnStyle = 'border-[#0B3321] bg-slate-900 dark:bg-[#0B3321] text-white';
               }
 
               return (
@@ -1192,10 +1294,10 @@ export function SimuladosView({
                   <span className="font-mono text-xs font-bold mt-0.5 shrink-0">{LETTERS[idx]})</span>
                   <span className="text-sm leading-relaxed flex-1">{optText}</span>
                   {showCorrection && isCorrectOption && (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0 mt-0.5" />
                   )}
                   {showCorrection && isSelected && !isCorrectOption && (
-                    <AlertTriangle className="w-4 h-4 text-red-700 shrink-0 mt-0.5" />
+                    <AlertTriangle className="w-4 h-4 text-red-700 dark:text-red-400 shrink-0 mt-0.5" />
                   )}
                 </button>
               );
@@ -1203,14 +1305,14 @@ export function SimuladosView({
           </div>
 
           {(submitted || (mode === 'treino' && selectedAnswer !== undefined)) && (
-            <div className="p-4 sm:p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <div className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-slate-900">
+                <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
                   Gabarito Comentado · Alternativa {LETTERS[currentQuestion.correctIndex]}
                 </p>
                 <div className="flex items-center gap-2">
                   {addedErrors[currentQuestion.id] && (
-                    <span className="text-xs font-medium text-amber-800">
+                    <span className="text-xs font-medium text-amber-800 dark:text-amber-300">
                       Adicionada ao Caderno de Erros
                     </span>
                   )}
@@ -1218,7 +1320,7 @@ export function SimuladosView({
                     type="button"
                     disabled={aiExplainingId === currentQuestion.id}
                     onClick={() => void handleExplainCurrentWithAi(currentQuestion)}
-                    className="min-h-[34px] px-3 py-1 rounded-lg bg-[#E8F3EC] hover:bg-emerald-100 text-[#0B3321] text-xs font-semibold inline-flex items-center gap-1.5"
+                    className="min-h-[34px] px-3 py-1 rounded-lg bg-[#E8F3EC] dark:bg-emerald-950/60 hover:bg-emerald-100 text-[#0B3321] dark:text-emerald-200 text-xs font-semibold inline-flex items-center gap-1.5"
                   >
                     {aiExplainingId === currentQuestion.id ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1229,14 +1331,14 @@ export function SimuladosView({
                   </button>
                 </div>
               </div>
-              <p className="text-sm text-slate-700 leading-relaxed">{currentQuestion.explanation}</p>
+              <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">{currentQuestion.explanation}</p>
               {currentQuestion.legalBasis && (
-                <p className="text-xs font-mono text-slate-500 pt-1">
+                <p className="text-xs font-mono text-slate-500 dark:text-slate-400 pt-1">
                   Fundamentação: {currentQuestion.legalBasis}
                 </p>
               )}
               {aiExplanations[currentQuestion.id] && (
-                <div className="p-3.5 rounded-xl bg-white border border-emerald-200 text-xs sm:text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
+                <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 text-xs sm:text-sm text-slate-800 dark:text-slate-100 whitespace-pre-wrap leading-relaxed">
                   {aiExplanations[currentQuestion.id]}
                 </div>
               )}
@@ -1244,13 +1346,13 @@ export function SimuladosView({
           )}
 
           {/* Pagination & Finish */}
-          <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 disabled={currentIndex === 0}
                 onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-                className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 disabled:opacity-40 hover:bg-slate-50"
+                className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-200 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-800"
               >
                 Anterior
               </button>
@@ -1258,7 +1360,7 @@ export function SimuladosView({
                 type="button"
                 disabled={currentIndex >= activeDeck.length - 1}
                 onClick={() => setCurrentIndex((i) => Math.min(activeDeck.length - 1, i + 1))}
-                className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 disabled:opacity-40 hover:bg-slate-50"
+                className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-200 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-800"
               >
                 Próxima
               </button>
@@ -1276,7 +1378,7 @@ export function SimuladosView({
           </div>
         </div>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-600">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center text-slate-600 dark:text-slate-300">
           Nenhuma questão encontrada para os filtros selecionados.
         </div>
       )}
@@ -1284,7 +1386,7 @@ export function SimuladosView({
       {/* Modal Cadastrar Nova Questão */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h2 className="font-display text-xl font-bold text-slate-900">Cadastrar Questão (Padrão CETAP)</h2>
               <button
@@ -1318,7 +1420,7 @@ export function SimuladosView({
                   <select
                     value={qOriginType}
                     onChange={(e) => setQOriginType(e.target.value as QuestionOriginType)}
-                    className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                    className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl"
                   >
                     <option value="official_cetap">Oficial · Prova Anterior Fundação CETAP</option>
                     <option value="official_camara">Oficial · Questão Legislativa (Câmara)</option>
@@ -1328,15 +1430,29 @@ export function SimuladosView({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Tópico do Edital</label>
-                <input
-                  required
-                  value={qTopic}
-                  onChange={(e) => setQTopic(e.target.value)}
-                  placeholder="Ex.: Regimento Interno ALEPA"
-                  className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-xl"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Tópico do Edital</label>
+                  <input
+                    required
+                    value={qTopic}
+                    onChange={(e) => setQTopic(e.target.value)}
+                    placeholder="Ex.: Regimento Interno ALEPA"
+                    className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Dificuldade</label>
+                  <select
+                    value={qDifficulty}
+                    onChange={(e) => setQDifficulty(e.target.value as QuestionDifficulty)}
+                    className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl"
+                  >
+                    <option value="basico">Básico</option>
+                    <option value="intermediario">Intermediário</option>
+                    <option value="avancado">Avançado</option>
+                  </select>
+                </div>
               </div>
 
               <div>

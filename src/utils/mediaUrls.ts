@@ -35,6 +35,10 @@ export function formatSafePublicUrl(rawUrl: string): string | null {
   }
 }
 
+export function isSafeHttpUrl(rawUrl: string): boolean {
+  return Boolean(formatSafePublicUrl(rawUrl));
+}
+
 export function getVideoEmbedInfo(rawUrl: string): { platform: string; embedUrl: string | null } {
   const ytId = extractYouTubeId(rawUrl);
   if (ytId) {

@@ -1,25 +1,30 @@
-# Security Specification — Meu Campus ALEPA
+# Security Specification — Meu Campus ALEPA 2026
 
-## 1. Data Invariants
-1. Every document under `/users/{userId}` and its subcollections (`topicProgress`, `studySessions`, `simuladoAttempts`, `errorNotebook`, `disciplineGoals`, `readingProgress`) belongs strictly to `userId == request.auth.uid`.
-2. Users cannot self-assign `role: 'teacher'` unless they are verified admins (`isAdmin()`). Students are always created with `role == 'student'` and `role` is immutable for non-admins.
-3. Subcollection writes (`topicProgress`, `studySessions`, `simuladoAttempts`, `errorNotebook`, `disciplineGoals`, `readingProgress`) verify parent `/users/{userId}` document existence via `exists(...)` (Master Gate), and `readingProgress` bounds arrays (`bookmarks <= 100`, `highlights <= 150`, `annotations <= 150`).
-4. Timestamps (`createdAt`, `updatedAt`) are strictly validated against `request.time`.
-5. `createdAt`, `uid`, `userId`, `ownerId`, and `authorId` are immutable after creation.
-6. Shared `/materials/{materialId}` and `/sharedQuestions/{questionId}` can only be created/modified by their verified owner (`ownerId == request.auth.uid` / `authorId == request.auth.uid`), and `isShared: true` / `isPublished: true` requires `isAdmin()` or owner control (only `isAdmin()` can publish shared class-wide resources to prevent spam, while any verified user can save personal resources with `isShared: false` / `isPublished: false`).
-7. All `allow list` rules explicitly evaluate `resource.data` (no blanket `isSignedIn()` lists and no `get()` inside `allow list`).
-8. All writes require `request.auth.token.email_verified == true`.
+## 1. Data Invariants & Role Separation
+1. **Separated Roles (`student | teacher | editor | admin | dev`)**:
+   - `student`: full access strictly inside `/users/{uid}` and own subcollections (`topicProgress`, `studySessions`, `simuladoAttempts`, `errorNotebook`, `disciplineGoals`, `readingProgress`), read published catalog items (`exams`, `managedDisciplines`, `managedTopics`, `simuladoLists`, `platformNotices`, `classes` where active, `lessons` published, `activities` published, `materials` `isShared == true && status == 'published'`, `sharedQuestions` `isPublished == true && status == 'published'`), and create/update own `submissions` and `enrollments`.
+   - `teacher`: strictly distinct from `editor` and `admin`. May manage `lessons`, `activities`, `enrollments`, and grade `submissions` ONLY within classes where `request.auth.uid in class.teacherIds` (stored on the document without unbounded arrays). May author `draft` or `in_review` `materials` and `sharedQuestions`, without privilege to publish institutional catalog items directly (`status == 'published' && isShared == true`), manage user roles, change storage configuration, or inspect `auditLogs`.
+   - `editor` (Administrador de Conteúdo): may review, approve, and publish `materials`, `sharedQuestions`, `managedDisciplines`, `managedTopics`, `simuladoLists`, `platformNotices`, and `lessons`, without privilege to manage user roles/activation, storage provider policies, or delete audit logs.
+   - `admin` / `dev` (Administrador Principal): full governance over users (`role`, `active`, `assignedClassIds`, `assignedDisciplineIds`), `exams`, `classes`, `storageMetadata`, `familyMembers`, and `auditLogs` read access.
+2. **Owner & Master Gate Discipline**:
+   - Every `/users/{userId}` subcollection validates parent existence (`exists(/databases/$(database)/documents/users/$(userId))`), strict ownership (`isOwner(userId)`), bounded fields/arrays, and `updatedAt == request.time`.
+   - User profile `preferences` (`theme`, `accentColor`, `fontScale`, `density`, `hiddenDashboardCards`, `dashboardCardOrder`, favorites, shortcuts) are owner-editable via `affectedKeys().hasOnly(...)` without ever allowing edits to `role`, `active`, `assignedClassIds`, or `assignedDisciplineIds`.
+3. **List & Field Hardening**:
+   - Every `allow list` rule evaluates `resource.data` directly with zero `get()` or `exists()` lookups.
+   - `isValidId(docId)` is enforced on `get`, `create`, `update`, and `delete` operations (never inside `allow list`).
+   - All privileged/shared writes require `request.auth.token.email_verified == true`.
+   - `auditLogs` are strictly append-only (`allow update, delete: if false`) and never store passwords, OAuth tokens, or API secrets.
 
-## 2. The "Dirty Dozen" Adversarial Payloads
+## 2. Adversarial Test Matrix (Dirty Dozen + Multi-Role RBAC)
 1. Unauthenticated read/write on `/users/u1` -> PERMISSION_DENIED.
-2. Unverified email (`email_verified: false`) writing `/users/u1` -> PERMISSION_DENIED.
-3. Student spoofing `role: 'teacher'` on `/users/u1` create -> PERMISSION_DENIED.
-4. Student injecting shadow field `isVerified: true` on `/users/u1` -> PERMISSION_DENIED.
-5. User A reading/listing User B's `/users/u2/errorNotebook` -> PERMISSION_DENIED.
-6. User A creating `/users/u1/studySessions/s1` with client-forged `createdAt` != `request.time` -> PERMISSION_DENIED.
-7. User A updating immutable `createdAt` or `userId` on `/users/u1/errorNotebook/e1` -> PERMISSION_DENIED.
-8. User A creating `/users/u1/topicProgress/bad..id` with invalid path ID -> PERMISSION_DENIED.
-9. User A injecting >2500 chars into `statement` on `/sharedQuestions/q1` -> PERMISSION_DENIED.
-10. Non-admin student setting `isShared: true` on `/materials/m1` -> PERMISSION_DENIED.
-11. User A deleting User B's `/materials/m2` -> PERMISSION_DENIED.
-12. Blanket query on `/materials` without filtering or trying to read private `isShared: false` doc owned by another user -> PERMISSION_DENIED.
+2. Unverified email (`email_verified: false`) writing `/users/u1` or `/auditLogs` -> PERMISSION_DENIED.
+3. Student spoofing `role: 'teacher'` or `role: 'editor'` on `/users/u1` create/update -> PERMISSION_DENIED.
+4. Student injecting shadow field `isVerified: true` or modifying `active`/`assignedClassIds` -> PERMISSION_DENIED.
+5. Teacher attempting to create/update `role` on `/users/u2` or create `/exams/ex1` -> PERMISSION_DENIED.
+6. Teacher attempting to publish institutional `isShared: true, status: 'published'` on `/materials/m1` -> PERMISSION_DENIED.
+7. Content Editor attempting to read `/auditLogs` or delete `/storageMetadata/f1` -> PERMISSION_DENIED.
+8. User A reading/listing User B's `/users/u2/errorNotebook` or `/submissions` belonging to Student B -> PERMISSION_DENIED.
+9. Student updating `manualScore`, `finalScore`, or `gradedBy` on own `/submissions/s1` -> PERMISSION_DENIED.
+10. Client-forged `createdAt` or `updatedAt != request.time` on `/users/u1/studySessions/s1` or `/auditLogs/l1` -> PERMISSION_DENIED.
+11. Mutating or deleting `/auditLogs/{logId}` -> PERMISSION_DENIED.
+12. Blanket `list` query on `/materials`, `/submissions`, or `/enrollments` without authorized filter -> PERMISSION_DENIED.

@@ -127,7 +127,7 @@ export function PerformanceView({
               · {isGuest ? 'Modo visitante (salvo localmente)' : 'Nuvem ativa'}
             </span>
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 mt-1">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1">
             Evolução e Desempenho ({isMedio ? 'Nível Médio' : 'Nível Superior'})
           </h1>
         </div>
@@ -135,52 +135,52 @@ export function PerformanceView({
 
       {/* 4-column KPI strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5">
-          <p className="text-xs text-slate-500">Horas acumuladas</p>
-          <p className="font-display text-2xl sm:text-3xl font-bold text-slate-900 font-mono tabular-nums mt-1">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Horas acumuladas</p>
+          <p className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 font-mono tabular-nums mt-1">
             {totalHours}h
           </p>
-          <p className="text-xs text-slate-500 mt-1 font-mono tabular-nums">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono tabular-nums">
             {periodComparison.mins7} min (7d) · {periodComparison.mins30} min (30d)
           </p>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5">
-          <p className="text-xs text-slate-500">Taxa de acertos</p>
-          <p className="font-display text-2xl sm:text-3xl font-bold text-[#0B3321] font-mono tabular-nums mt-1">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Taxa de acertos</p>
+          <p className="font-display text-2xl sm:text-3xl font-bold text-[#0B3321] dark:text-emerald-400 font-mono tabular-nums mt-1">
             {overallAccuracyPct}%
           </p>
-          <p className="text-xs text-slate-500 mt-1 font-mono tabular-nums">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono tabular-nums">
             {totalCorrectAnswers}/{totalQuestionsAnswered} questões · média {avgScore}
           </p>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5">
-          <p className="text-xs text-slate-500">Simulados realizados</p>
-          <p className="font-display text-2xl sm:text-3xl font-bold text-slate-900 font-mono tabular-nums mt-1">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Simulados realizados</p>
+          <p className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 font-mono tabular-nums mt-1">
             {campusAttempts.length}
           </p>
-          <p className="text-xs text-slate-500 mt-1">Padrão Fundação CETAP</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Padrão Fundação CETAP</p>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5">
-          <p className="text-xs text-slate-500">Recuperação de erros</p>
-          <p className="font-display text-2xl sm:text-3xl font-bold text-[#16A34A] font-mono tabular-nums mt-1">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Recuperação de erros</p>
+          <p className="font-display text-2xl sm:text-3xl font-bold text-[#16A34A] dark:text-emerald-400 font-mono tabular-nums mt-1">
             {recoveryPct}%
           </p>
-          <p className="text-xs text-slate-500 mt-1 font-mono tabular-nums">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono tabular-nums">
             {masteredErrors}/{totalErrors} dominadas
           </p>
         </div>
       </div>
 
       {/* Recomendações Automáticas baseadas em Dados Reais */}
-      <section className="bg-[#E8F3EC] border border-emerald-200 rounded-2xl p-5 space-y-2.5">
-        <div className="flex items-center gap-2 text-xs font-bold text-[#0B3321]">
-          <Lightbulb className="w-4 h-4 text-[#146C43]" />
+      <section className="bg-[#E8F3EC] dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-5 space-y-2.5">
+        <div className="flex items-center gap-2 text-xs font-bold text-[#0B3321] dark:text-emerald-300">
+          <Lightbulb className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
           <span>Recomendações Baseadas nos Seus Dados Reais</span>
         </div>
-        <ul className="space-y-1.5 text-xs sm:text-sm text-[#0B3321]">
+        <ul className="space-y-1.5 text-xs sm:text-sm text-[#0B3321] dark:text-emerald-200">
           {smartRecommendations.map((rec, i) => (
             <li key={i} className="flex items-start gap-2">
               <span className="font-bold">•</span>
@@ -191,11 +191,11 @@ export function PerformanceView({
       </section>
 
       {/* Progress by Discipline */}
-      <section className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-5">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-[#0B3321]" />
-            <h2 className="font-display text-base sm:text-lg font-bold text-slate-900">
+            <BarChart3 className="w-5 h-5 text-[#0B3321] dark:text-emerald-400" />
+            <h2 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
               Cobertura, Horas e Erros Pendentes por Disciplina
             </h2>
           </div>
@@ -205,20 +205,20 @@ export function PerformanceView({
           {disciplineAnalytics.map(({ disc, avgMastery, mins, pendingDiscErrors }) => (
             <div key={disc.id} className="space-y-1.5">
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
-                <span className="font-medium text-slate-900">
+                <span className="font-medium text-slate-900 dark:text-slate-100">
                   {disc.priorityRank}º · {disc.shortName}
                 </span>
-                <div className="flex items-center gap-3 text-xs font-mono tabular-nums text-slate-600">
+                <div className="flex items-center gap-3 text-xs font-mono tabular-nums text-slate-600 dark:text-slate-400">
                   {pendingDiscErrors > 0 && (
-                    <span className="text-amber-700 font-semibold">{pendingDiscErrors} erros</span>
+                    <span className="text-amber-700 dark:text-amber-300 font-semibold">{pendingDiscErrors} erros</span>
                   )}
                   <span>{mins} min</span>
-                  <span className="font-semibold text-slate-900 w-10 text-right">{avgMastery}%</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100 w-10 text-right">{avgMastery}%</span>
                 </div>
               </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-[#0B3321] rounded-full transition-all"
+                  className="h-full bg-[#0B3321] dark:bg-emerald-600 rounded-full transition-all"
                   style={{ width: `${avgMastery}%` }}
                 />
               </div>
@@ -229,10 +229,10 @@ export function PerformanceView({
 
       {/* Evolução recente dos simulados */}
       {campusAttempts.length > 0 && (
-        <section className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4">
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4">
           <div className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-[#146C43]" />
-            <h2 className="font-display text-base sm:text-lg font-bold text-slate-900">
+            <TrendingUp className="w-5 h-5 text-[#146C43] dark:text-emerald-400" />
+            <h2 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
               Evolução de Notas nos Últimos Simulados
             </h2>
           </div>
@@ -240,15 +240,15 @@ export function PerformanceView({
             {campusAttempts.slice(0, 5).reverse().map((att) => {
               const pct = Math.round((att.score / 10) * 100);
               return (
-                <div key={att.id} className="p-3 rounded-xl bg-[#F5F7F6] border border-slate-200 space-y-2">
+                <div key={att.id} className="p-3 rounded-xl bg-[#F5F7F6] dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2">
                   <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="font-bold text-[#0B3321]">{att.score.toFixed(1)}/10</span>
-                    <span className="text-slate-500">{att.correctCount}/{att.totalQuestions}</span>
+                    <span className="font-bold text-[#0B3321] dark:text-emerald-400">{att.score.toFixed(1)}/10</span>
+                    <span className="text-slate-500 dark:text-slate-400">{att.correctCount}/{att.totalQuestions}</span>
                   </div>
-                  <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                     <div className="h-full bg-[#146C43] rounded-full" style={{ width: `${pct}%` }} />
                   </div>
-                  <p className="text-[11px] text-slate-600 truncate">{att.title}</p>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">{att.title}</p>
                 </div>
               );
             })}
@@ -258,25 +258,25 @@ export function PerformanceView({
 
       {/* Tables: Simulado History + Study Sessions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6">
-          <h2 className="font-display text-lg font-bold text-slate-900 mb-4">Histórico de Simulados</h2>
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
+          <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100 mb-4">Histórico de Simulados</h2>
           {campusAttempts.length === 0 ? (
-            <p className="text-sm text-slate-500 py-6 text-center">
+            <p className="text-sm text-slate-500 dark:text-slate-400 py-6 text-center">
               Nenhum simulado registrado neste campus ainda. Conclua uma bateria na aba Questões.
             </p>
           ) : (
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {campusAttempts.slice(0, 10).map((att) => (
                 <div key={att.id} className="py-3 flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-900 truncate">{att.title}</p>
-                    <p className="text-xs text-slate-500 font-mono tabular-nums">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{att.title}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
                       {att.correctCount}/{att.totalQuestions} acertos · {Math.round(att.durationSeconds / 60)} min
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <CheckCircle2 className="w-4 h-4 text-[#16A34A]" />
-                    <span className="font-mono text-sm font-bold text-slate-900 tabular-nums">
+                    <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100 tabular-nums">
                       {att.score.toFixed(1)}
                     </span>
                   </div>
@@ -286,25 +286,25 @@ export function PerformanceView({
           )}
         </section>
 
-        <section className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6">
-          <h2 className="font-display text-lg font-bold text-slate-900 mb-4">Sessões de Estudo Recentes</h2>
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
+          <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100 mb-4">Sessões de Estudo Recentes</h2>
           {campusSessions.length === 0 ? (
-            <p className="text-sm text-slate-500 py-6 text-center">
+            <p className="text-sm text-slate-500 dark:text-slate-400 py-6 text-center">
               Nenhuma sessão registrada neste campus ainda. Inicie o cronômetro de 2h no Cronograma.
             </p>
           ) : (
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {campusSessions.slice(0, 10).map((ses) => (
                 <div key={ses.id} className="py-3 flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-900 truncate">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
                       {getDisciplineShortName(ses.disciplineId)} · {ses.topicTitle}
                     </p>
-                    <p className="text-xs text-slate-500 font-mono tabular-nums">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
                       {ses.dateKey.split('-').reverse().join('/')} · {ses.blockType}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5 font-mono text-xs font-semibold text-slate-700 tabular-nums shrink-0">
+                  <div className="flex items-center gap-1.5 font-mono text-xs font-semibold text-slate-700 dark:text-slate-300 tabular-nums shrink-0">
                     <Clock className="w-3.5 h-3.5 text-slate-400" />
                     <span>{ses.durationMinutes} min</span>
                   </div>

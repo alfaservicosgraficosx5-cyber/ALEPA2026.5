@@ -378,7 +378,7 @@ export function StudyRoomView({
             <button
               type="button"
               onClick={() => onNavigate('disciplines')}
-              className="min-h-[42px] px-3.5 py-2 bg-white border border-slate-200 hover:border-[#0B3321] text-slate-800 text-xs sm:text-sm font-medium rounded-xl inline-flex items-center gap-1.5"
+              className="min-h-[42px] px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-medium rounded-xl inline-flex items-center gap-1.5"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Voltar ao Edital</span>
@@ -396,9 +396,9 @@ export function StudyRoomView({
       />
 
       {/* Seletor rápido de disciplina e tópico dentro da Sala */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <label htmlFor="room-disc-select" className="block text-xs font-semibold text-slate-700 mb-1">
+          <label htmlFor="room-disc-select" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
             Disciplina
           </label>
           <select
@@ -410,7 +410,7 @@ export function StudyRoomView({
                 onSelectTopic(nextDisc.id, nextDisc.topics[0].id);
               }
             }}
-            className="w-full min-h-[44px] px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl"
+            className="w-full min-h-[44px] px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl"
           >
             {disciplines.map((d) => (
               <option key={d.id} value={d.id}>
@@ -420,14 +420,14 @@ export function StudyRoomView({
           </select>
         </div>
         <div>
-          <label htmlFor="room-topic-select" className="block text-xs font-semibold text-slate-700 mb-1">
+          <label htmlFor="room-topic-select" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
             Assunto / Tópico do Edital
           </label>
           <select
             id="room-topic-select"
             value={activeTopic.id}
             onChange={(e) => onSelectTopic(activeDiscipline.id, e.target.value)}
-            className="w-full min-h-[44px] px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl"
+            className="w-full min-h-[44px] px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl"
           >
             {activeDiscipline.topics.map((t) => (
               <option key={t.id} value={t.id}>
@@ -440,12 +440,12 @@ export function StudyRoomView({
       </div>
 
       {feedback && (
-        <div className="bg-[#E8F3EC] border border-emerald-200 text-[#0B3321] rounded-xl px-4 py-2.5 text-xs font-medium">
+        <div className="bg-[#E8F3EC] dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-[#0B3321] dark:text-emerald-200 rounded-xl px-4 py-2.5 text-xs font-medium">
           {feedback}
         </div>
       )}
       {aiError && (
-        <div className="bg-red-50 border border-red-200 text-red-900 rounded-xl px-4 py-3 text-xs font-medium">
+        <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-900 dark:text-red-200 rounded-xl px-4 py-3 text-xs font-medium">
           {aiError}
         </div>
       )}
@@ -459,14 +459,14 @@ export function StudyRoomView({
         >
           <ul className="space-y-2">
             {activeTopic.subtopics.map((sub, idx) => (
-              <li key={idx} className="flex items-start gap-2.5 text-sm text-slate-700">
-                <span className="mt-1.5 w-2 h-2 rounded-full bg-[#146C43] shrink-0" />
+              <li key={idx} className="flex items-start gap-2.5 text-sm text-slate-700 dark:text-slate-300">
+                <span className="mt-1.5 w-2 h-2 rounded-full bg-[#146C43] dark:bg-emerald-400 shrink-0" />
                 <span>{sub}</span>
               </li>
             ))}
           </ul>
-          <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3 text-xs text-slate-600">
-            <span className="font-mono font-semibold text-[#0B3321]">
+          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
+            <span className="font-mono font-semibold text-[#0B3321] dark:text-emerald-400">
               Peso na disciplina: {activeDiscipline.examQuestions}q · {activeDiscipline.examPoints.toFixed(1)} pts
             </span>
             <span aria-hidden="true">·</span>
@@ -479,7 +479,7 @@ export function StudyRoomView({
           subtitle={`Domínio atual: ${progress?.masteryLevel ?? 0}%`}
         >
           <div className="space-y-3">
-            <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
                 className="h-full bg-[#146C43] rounded-full transition-all"
                 style={{ width: `${progress?.masteryLevel ?? 0}%` }}
@@ -502,12 +502,12 @@ export function StudyRoomView({
                     onClick={() => handleToggleStage(step.key)}
                     className={`min-h-[44px] px-3 py-2 rounded-xl border text-left text-xs font-semibold flex items-center justify-between gap-2 transition-colors ${
                       done
-                        ? 'bg-[#E8F3EC] border-[#146C43] text-[#0B3321]'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                        ? 'bg-[#E8F3EC] dark:bg-emerald-950/50 border-[#146C43] dark:border-emerald-600 text-[#0B3321] dark:text-emerald-300'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'
                     }`}
                   >
                     <span>{step.label}</span>
-                    <Check className={`w-4 h-4 shrink-0 ${done ? 'text-[#146C43]' : 'text-slate-300'}`} />
+                    <Check className={`w-4 h-4 shrink-0 ${done ? 'text-[#146C43] dark:text-emerald-400' : 'text-slate-300 dark:text-slate-600'}`} />
                   </button>
                 );
               })}
@@ -537,12 +537,12 @@ export function StudyRoomView({
         }
       >
         {roomCache.explanation ? (
-          <div className="prose prose-sm max-w-none text-slate-800 whitespace-pre-wrap leading-relaxed bg-[#F5F7F6] border border-slate-200 rounded-xl p-4 sm:p-5 text-sm">
+          <div className="prose prose-sm dark:prose-invert max-w-none text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed bg-[#F5F7F6] dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-5 text-sm">
             {roomCache.explanation}
           </div>
         ) : (
-          <div className="p-5 rounded-xl bg-[#F5F7F6] border border-slate-200 text-sm text-slate-700 space-y-2">
-            <p className="font-semibold text-slate-900">Guia de estudo do assunto:</p>
+          <div className="p-5 rounded-xl bg-[#F5F7F6] dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 space-y-2">
+            <p className="font-semibold text-slate-900 dark:text-slate-100">Guia de estudo do assunto:</p>
             <p>
               Clique em <strong>"Gerar explicação do assunto"</strong> para o Professor IA estruturar os conceitos
               centrais de <strong>{activeTopic.title}</strong> com foco na Banca CETAP e pontos de revisão rápida.
@@ -558,7 +558,7 @@ export function StudyRoomView({
           subtitle={`${topicMaterials.pdfs.length} selecionados para ${activeDiscipline.shortName}`}
         >
           {topicMaterials.pdfs.length === 0 ? (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Nenhum PDF cadastrado especificamente nesta disciplina ainda. Você pode adicionar na Central Inteligente.
             </p>
           ) : (
@@ -572,15 +572,15 @@ export function StudyRoomView({
                       key={mat.id}
                       type="button"
                       onClick={() => setActiveBookMaterial(mat)}
-                      className="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-[#0B3321] bg-slate-50/70 flex items-start justify-between gap-2 text-xs transition-colors"
+                      className="w-full text-left p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs transition-colors"
                     >
                       <div className="min-w-0">
-                        <p className="font-semibold text-slate-900 line-clamp-2">{mat.title}</p>
-                        <p className="text-[11px] text-[#146C43] font-medium mt-0.5">
+                        <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{mat.title}</p>
+                        <p className="text-[11px] text-[#146C43] dark:text-emerald-400 font-medium mt-0.5">
                           Ler no Book Reader · {mat.institution || 'Biblioteca ALEPA'}
                         </p>
                       </div>
-                      <BookOpen className="w-4 h-4 text-[#146C43] shrink-0 mt-0.5" />
+                      <BookOpen className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
                     </button>
                   );
                 }
@@ -596,13 +596,13 @@ export function StudyRoomView({
                         onNavigate('materials');
                       }
                     }}
-                    className="p-3 rounded-xl border border-slate-200 hover:border-[#0B3321] bg-slate-50/70 flex items-start justify-between gap-2 text-xs"
+                    className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs"
                   >
                     <div className="min-w-0">
-                      <p className="font-semibold text-slate-900 line-clamp-2">{mat.title}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">{mat.institution || 'Biblioteca ALEPA'}</p>
+                      <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{mat.title}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{mat.institution || 'Biblioteca ALEPA'}</p>
                     </div>
-                    <FileText className="w-4 h-4 text-[#146C43] shrink-0 mt-0.5" />
+                    <FileText className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
                   </a>
                 );
               })}
@@ -611,7 +611,7 @@ export function StudyRoomView({
           <button
             type="button"
             onClick={() => onNavigate('materials')}
-            className="mt-3 text-xs font-semibold text-[#0B3321] hover:underline inline-flex items-center gap-1"
+            className="mt-3 text-xs font-semibold text-[#0B3321] dark:text-emerald-400 hover:underline inline-flex items-center gap-1"
           >
             Abrir Central de Materiais →
           </button>
@@ -628,13 +628,13 @@ export function StudyRoomView({
                 href={src.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-3 rounded-xl border border-slate-200 hover:border-[#0B3321] bg-slate-50/70 flex items-start justify-between gap-2 text-xs"
+                className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs"
               >
                 <div className="min-w-0">
-                  <p className="font-semibold text-slate-900">{src.title}</p>
-                  <p className="text-[11px] text-slate-600 mt-0.5 line-clamp-2">{src.description}</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{src.title}</p>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 line-clamp-2">{src.description}</p>
                 </div>
-                <ExternalLink className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+                <ExternalLink className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0 mt-0.5" />
               </a>
             ))}
           </div>
@@ -651,13 +651,13 @@ export function StudyRoomView({
                 href={v.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-3 rounded-xl border border-slate-200 hover:border-[#0B3321] bg-slate-50/70 flex items-start justify-between gap-2 text-xs"
+                className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs"
               >
                 <div className="min-w-0">
-                  <p className="font-semibold text-slate-900 line-clamp-2">{v.title}</p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Vídeo · {v.institution || 'Aula'}</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{v.title}</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Vídeo · {v.institution || 'Aula'}</p>
                 </div>
-                <Video className="w-4 h-4 text-[#146C43] shrink-0 mt-0.5" />
+                <Video className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
               </a>
             ))}
             {topicMaterials.audios.map((a) => (
@@ -666,22 +666,22 @@ export function StudyRoomView({
                 href={a.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-3 rounded-xl border border-slate-200 hover:border-[#0B3321] bg-slate-50/70 flex items-start justify-between gap-2 text-xs"
+                className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs"
               >
                 <div className="min-w-0">
-                  <p className="font-semibold text-slate-900 line-clamp-2">{a.title}</p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Podcast / Áudio</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{a.title}</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Podcast / Áudio</p>
                 </div>
-                <Headphones className="w-4 h-4 text-[#146C43] shrink-0 mt-0.5" />
+                <Headphones className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
               </a>
             ))}
             {topicMaterials.videos.length === 0 && topicMaterials.audios.length === 0 && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Cadastre videoaulas ou episódios do Spotify nas abas Vídeos ou Podcasts para vê-los aqui.
               </p>
             )}
           </div>
-          <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-[#0B3321]">
+          <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-[#0B3321] dark:text-emerald-400">
             <button type="button" onClick={() => onNavigate('videos')} className="hover:underline">
               Ver Vídeos
             </button>
@@ -702,7 +702,7 @@ export function StudyRoomView({
               type="button"
               disabled={loadingAction !== null}
               onClick={() => handleRunProfessorAction('generate_mindmap')}
-              className="min-h-[38px] px-3 py-1.5 bg-[#E8F3EC] hover:bg-emerald-100 text-[#0B3321] text-xs font-semibold rounded-xl inline-flex items-center gap-1.5"
+              className="min-h-[38px] px-3 py-1.5 bg-[#E8F3EC] dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-[#0B3321] dark:text-emerald-300 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5"
             >
               {loadingAction === 'generate_mindmap' ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -719,12 +719,12 @@ export function StudyRoomView({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {activeMindMap.branches.map((branch, idx) => (
-                <div key={idx} className="p-3.5 rounded-xl bg-[#F5F7F6] border border-slate-200 space-y-2">
-                  <p className="text-xs font-bold text-[#0B3321]">{branch.title}</p>
+                <div key={idx} className="p-3.5 rounded-xl bg-[#F5F7F6] dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2">
+                  <p className="text-xs font-bold text-[#0B3321] dark:text-emerald-400">{branch.title}</p>
                   <ul className="space-y-1">
                     {branch.items.map((item, i) => (
-                      <li key={i} className="text-xs text-slate-700 flex items-start gap-1.5">
-                        <span className="text-[#146C43] font-bold">•</span>
+                      <li key={i} className="text-xs text-slate-700 dark:text-slate-300 flex items-start gap-1.5">
+                        <span className="text-[#146C43] dark:text-emerald-400 font-bold">•</span>
                         <span>{item}</span>
                       </li>
                     ))}
@@ -743,7 +743,7 @@ export function StudyRoomView({
               type="button"
               disabled={loadingAction !== null}
               onClick={() => handleRunProfessorAction('generate_flashcards')}
-              className="min-h-[38px] px-3 py-1.5 bg-[#E8F3EC] hover:bg-emerald-100 text-[#0B3321] text-xs font-semibold rounded-xl inline-flex items-center gap-1.5"
+              className="min-h-[38px] px-3 py-1.5 bg-[#E8F3EC] dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-[#0B3321] dark:text-emerald-300 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5"
             >
               {loadingAction === 'generate_flashcards' ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -761,24 +761,24 @@ export function StudyRoomView({
               return (
                 <div
                   key={card.id}
-                  className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2.5"
+                  className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 space-y-2.5"
                 >
                   <button
                     type="button"
                     onClick={() => setFlippedCards((prev) => ({ ...prev, [card.id]: !isFlipped }))}
                     className="w-full text-left space-y-1.5"
                   >
-                    <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-[#146C43]">
+                    <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">
                       <span>{isFlipped ? 'VERSO · RESPOSTA' : 'FRENTE · PERGUNTA'}</span>
-                      <span className="inline-flex items-center gap-1 text-slate-500">
+                      <span className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400">
                         <FlipHorizontal className="w-3.5 h-3.5" /> Virar cartão
                       </span>
                     </div>
-                    <p className="text-sm font-semibold text-slate-900 leading-relaxed">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-relaxed">
                       {isFlipped ? card.back : card.front}
                     </p>
                     {isFlipped && card.tip && (
-                      <p className="text-xs text-[#0B3321] bg-[#E8F3EC] px-2.5 py-1.5 rounded-lg">
+                      <p className="text-xs text-[#0B3321] dark:text-emerald-200 bg-[#E8F3EC] dark:bg-emerald-950/50 px-2.5 py-1.5 rounded-lg">
                         Dica: {card.tip}
                       </p>
                     )}
@@ -792,7 +792,7 @@ export function StudyRoomView({
                         className={`min-h-[34px] px-3 py-1 rounded-lg text-xs font-semibold border ${
                           rating === 'facil'
                             ? 'bg-[#16A34A] text-white border-[#16A34A]'
-                            : 'bg-white border-slate-200 text-slate-700'
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
                         }`}
                       >
                         Dominei
@@ -803,7 +803,7 @@ export function StudyRoomView({
                         className={`min-h-[34px] px-3 py-1 rounded-lg text-xs font-semibold border ${
                           rating === 'revisar'
                             ? 'bg-amber-600 text-white border-amber-600'
-                            : 'bg-white border-slate-200 text-slate-700'
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
                         }`}
                       >
                         Revisar depois
@@ -825,7 +825,7 @@ export function StudyRoomView({
           <button
             type="button"
             onClick={() => onNavigate('simulados')}
-            className="min-h-[38px] px-3.5 py-1.5 border border-slate-200 hover:border-[#0B3321] rounded-xl text-xs font-semibold text-slate-800 inline-flex items-center gap-1.5"
+            className="min-h-[38px] px-3.5 py-1.5 border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1.5"
           >
             <ClipboardList className="w-3.5 h-3.5" />
             <span>Abrir Simulado Completo</span>
@@ -833,7 +833,7 @@ export function StudyRoomView({
         }
       >
         {topicQuestions.length === 0 ? (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Nenhuma questão vinculada a {getDisciplineShortName(activeDiscipline.id)} neste filtro. Use o Banco de
             Questões ou o Professor IA para gerar questões inéditas.
           </p>
@@ -843,24 +843,24 @@ export function StudyRoomView({
               const selected = quizAnswers[q.id];
               const answered = selected !== undefined;
               return (
-                <div key={q.id} className="p-4 sm:p-5 rounded-xl border border-slate-200 bg-slate-50/40 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-                    <span className="font-semibold text-slate-800">
+                <div key={q.id} className="p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-800/50 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
                       Questão {qIdx + 1} · {q.topicTitle}
                     </span>
-                    <span className={q.isOfficial ? 'text-[#146C43] font-semibold' : 'text-amber-800 font-medium'}>
+                    <span className={q.isOfficial ? 'text-[#146C43] dark:text-emerald-400 font-semibold' : 'text-amber-800 dark:text-amber-400 font-medium'}>
                       {q.source || (q.isOfficial ? 'Fonte Oficial' : 'Treinamento')}
                     </span>
                   </div>
-                  <p className="text-sm font-medium text-slate-900 leading-relaxed">{q.statement}</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100 leading-relaxed">{q.statement}</p>
                   <div className="space-y-2">
                     {q.options.map((opt, idx) => {
                       const isCorrect = idx === q.correctIndex;
                       const isChosen = selected === idx;
-                      let cls = 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50';
+                      let cls = 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800';
                       if (answered) {
-                        if (isCorrect) cls = 'bg-emerald-50 border-emerald-600 text-emerald-950 font-medium';
-                        else if (isChosen) cls = 'bg-red-50 border-red-500 text-red-950';
+                        if (isCorrect) cls = 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-600 text-emerald-950 dark:text-emerald-200 font-medium';
+                        else if (isChosen) cls = 'bg-red-50 dark:bg-red-950/50 border-red-500 text-red-950 dark:text-red-200';
                       }
                       return (
                         <button
@@ -876,12 +876,12 @@ export function StudyRoomView({
                     })}
                   </div>
                   {answered && (
-                    <div className="p-3 rounded-xl bg-white border border-slate-200 text-xs text-slate-700 space-y-1">
-                      <p className="font-semibold text-slate-900 inline-flex items-center gap-1.5">
+                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 space-y-1">
+                      <p className="font-semibold text-slate-900 dark:text-slate-100 inline-flex items-center gap-1.5">
                         <CheckCircle2 className="w-3.5 h-3.5 text-[#16A34A]" /> Comentário:
                       </p>
                       <p>{q.explanation}</p>
-                      {q.legalBasis && <p className="text-[#146C43] font-medium">Base: {q.legalBasis}</p>}
+                      {q.legalBasis && <p className="text-[#146C43] dark:text-emerald-400 font-medium">Base: {q.legalBasis}</p>}
                     </div>
                   )}
                 </div>
@@ -900,7 +900,7 @@ export function StudyRoomView({
             <button
               type="button"
               onClick={() => onNavigate('revisions')}
-              className="min-h-[38px] px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 inline-flex items-center gap-1.5"
+              className="min-h-[38px] px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1.5"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Abrir Revisões</span>
@@ -908,8 +908,8 @@ export function StudyRoomView({
           }
         >
           {topicErrors.length === 0 ? (
-            <div className="p-4 rounded-xl bg-[#F5F7F6] border border-slate-200 text-xs text-slate-700 flex items-start gap-2.5">
-              <RefreshCw className="w-4 h-4 text-[#146C43] shrink-0 mt-0.5" />
+            <div className="p-4 rounded-xl bg-[#F5F7F6] dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2.5">
+              <RefreshCw className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
               <p>
                 Nenhum erro pendente registrado neste tópico. Se você errar alguma questão na mini prática acima ou nos
                 simulados, ela aparecerá aqui para revisão espaçada automática.
@@ -918,12 +918,12 @@ export function StudyRoomView({
           ) : (
             <div className="space-y-2.5">
               {topicErrors.slice(0, 4).map((err) => (
-                <div key={err.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 text-xs space-y-1">
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono">
+                <div key={err.id} className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 text-xs space-y-1">
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                     <span>Status: {err.status === 'mastered' ? 'Dominada' : 'Pendente'}</span>
                     <span>Próx. revisão: {err.nextReviewDate.split('-').reverse().join('/')}</span>
                   </div>
-                  <p className="font-medium text-slate-900 line-clamp-2">{err.questionStem}</p>
+                  <p className="font-medium text-slate-900 dark:text-slate-100 line-clamp-2">{err.questionStem}</p>
                 </div>
               ))}
             </div>
@@ -940,7 +940,7 @@ export function StudyRoomView({
               value={noteDraft}
               onChange={(e) => setNoteDraft(e.target.value)}
               placeholder="Anote artigos importantes, prazos, exceções da banca CETAP e dúvidas para revisar..."
-              className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
+              className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
             />
             <div className="flex justify-end">
               <button

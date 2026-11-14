@@ -28,6 +28,7 @@ import {
 } from 'firebase/firestore';
 import {
   OperationType,
+  FIREBASE_STORAGE_BUCKET,
   auth,
   db,
   googleAuthProvider,
@@ -45,13 +46,20 @@ import { GERAL_DEFAULT_MATERIALS } from '../data/alepaGeneralLibrary';
 import { MEDIO_DEFAULT_MATERIALS, MEDIO_QUESTIONS } from '../data/alepaMedioLibrary';
 import {
   AccessSession,
+  Activity,
+  ActivitySubmission,
+  AuditLogEntry,
   BlockType,
   CampusLevel,
+  ClassEnrollment,
+  Classroom,
   Discipline,
   DisciplineWeeklyGoal,
   ErrorEntry,
   ErrorReason,
+  ExamConcurso,
   FamilyMember,
+  Lesson,
   LibraryCategoryId,
   LibraryScope,
   LinkStatus,
@@ -64,22 +72,53 @@ import {
   PlatformNotice,
   PublicationStatus,
   Question,
+  QuestionDifficulty,
+  QuestionFormat,
   QuestionOriginType,
   ReadingProgress,
   ResourceType,
   SimuladoAttempt,
   SimuladoList,
+  StorageMetadataRecord,
+  StorageObjectCategory,
+  StorageProviderType,
+  StudentPreferences,
   StudyMaterial,
   StudySession,
+  SubmissionRevision,
   TopicProgress,
   UserProfile,
   UserRole,
+  canAccessAdminRole,
+  canAccessTeacherRole,
   canManageUsersRole,
-  isStaffRole,
+  isEditorRole,
+  isTeacherRole,
   normalizeUserRole,
 } from '../types';
 
-export type WorkspaceMode = 'student' | 'admin';
+export type WorkspaceMode = 'student' | 'teacher' | 'admin';
+
+export const DEFAULT_STUDENT_PREFERENCES: StudentPreferences = {
+  theme: 'light',
+  accentColor: 'emerald',
+  fontScale: 'md',
+  density: 'comfortable',
+  hiddenDashboardCards: [],
+  dashboardCardOrder: [
+    'hero',
+    'continue_reading',
+    'study_today',
+    'classroom_feed',
+    'notices',
+    'quick_actions',
+    'disciplines_overview',
+  ],
+  favoriteMaterialIds: [],
+  favoriteQuestionIds: [],
+  favoriteTopicIds: [],
+  customShortcuts: [],
+};
 
 interface AuthContextValue {
   user: User | null;
@@ -94,12 +133,19 @@ interface AuthContextValue {
   effectiveRole: NormalizedUserRole;
   isAdmin: boolean;
   isEditor: boolean;
+  isTeacher: boolean;
   isDev: boolean;
   canAccessAdminPanel: boolean;
+  canAccessTeacherPanel: boolean;
   canManageUsers: boolean;
   canPublishShared: boolean;
   activeWorkspaceMode: WorkspaceMode;
   setActiveWorkspaceMode: (mode: WorkspaceMode) => void;
+  preferences: StudentPreferences;
+  updateStudentPreferences: (patch: Partial<StudentPreferences>) => Promise<void>;
+  toggleFavoriteMaterial: (materialId: string) => Promise<void>;
+  toggleFavoriteQuestion: (questionId: string) => Promise<void>;
+  toggleFavoriteTopic: (topicId: string) => Promise<void>;
   getIdToken: () => Promise<string | null>;
   myFamilyMembership: FamilyMember | null;
   familyMembers: FamilyMember[];
@@ -133,6 +179,18 @@ interface AuthContextValue {
   allManagedSimuladoLists: SimuladoList[];
   platformNotices: PlatformNotice[];
   allManagedNotices: PlatformNotice[];
+  exams: ExamConcurso[];
+  allManagedExams: ExamConcurso[];
+  classes: Classroom[];
+  allManagedClasses: Classroom[];
+  enrollments: ClassEnrollment[];
+  lessons: Lesson[];
+  allManagedLessons: Lesson[];
+  activities: Activity[];
+  allManagedActivities: Activity[];
+  submissions: ActivitySubmission[];
+  storageMetadataRecords: StorageMetadataRecord[];
+  auditLogs: AuditLogEntry[];
   getCampusDisciplines: (campus: CampusLevel, medioCargoGroup?: MedioCargoGroup) => Discipline[];
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string, displayName: string, preferredRole: UserRole) => Promise<void>;
@@ -149,6 +207,11 @@ interface AuthContextValue {
     targetCargo?: string;
   }) => Promise<void>;
   updateUserRole: (targetUid: string, nextRole: NormalizedUserRole) => Promise<void>;
+  toggleUserActive: (targetUid: string, active: boolean) => Promise<void>;
+  updateUserAssignments: (
+    targetUid: string,
+    patch: { assignedClassIds?: string[]; assignedDisciplineIds?: string[] }
+  ) => Promise<void>;
   saveDisciplineWeeklyGoal: (disciplineId: string, weeklyGoalMinutes: number) => Promise<void>;
   saveTopicProgress: (
     topicId: string,
@@ -209,6 +272,15 @@ interface AuthContextValue {
     relevanceTier?: MaterialRelevanceTier;
     campusLevel?: LibraryScope;
     status?: PublicationStatus;
+    classId?: string;
+    keywords?: string[];
+    author?: string;
+    edition?: string;
+    year?: number;
+    checksumSha256?: string;
+    storageProvider?: StorageProviderType;
+    storagePath?: string;
+    reviewNotes?: string;
     fileName?: string;
     description?: string;
     isShared?: boolean;
@@ -235,6 +307,9 @@ interface AuthContextValue {
     legalBasis?: string;
     source?: string;
     originType?: QuestionOriginType;
+    difficulty?: QuestionDifficulty;
+    questionFormat?: QuestionFormat;
+    classId?: string;
     escolaridade?: CampusLevel;
     isOfficial?: boolean;
     isPublished?: boolean;
@@ -291,6 +366,116 @@ interface AuthContextValue {
     status: PublicationStatus;
   }) => Promise<string>;
   updatePlatformNoticeStatus: (noticeId: string, status: PublicationStatus) => Promise<void>;
+  saveExamConcurso: (input: {
+    examId?: string;
+    title: string;
+    institution: string;
+    code: string;
+    year: number;
+    levels: CampusLevel[];
+    positions: string[];
+    examDate?: string;
+    status: PublicationStatus;
+  }) => Promise<string>;
+  updateExamStatus: (examId: string, status: PublicationStatus) => Promise<void>;
+  saveClassroom: (input: {
+    classId?: string;
+    name: string;
+    code: string;
+    examId: string;
+    campusLevel: CampusLevel;
+    disciplineIds: string[];
+    teacherIds: string[];
+    description?: string;
+    active: boolean;
+    status: PublicationStatus;
+  }) => Promise<string>;
+  updateClassroomStatus: (classId: string, status: PublicationStatus) => Promise<void>;
+  enrollStudentInClass: (input: {
+    classId: string;
+    studentId?: string;
+    studentName?: string;
+    studentEmail?: string;
+    teacherId?: string;
+  }) => Promise<string>;
+  updateEnrollmentStatus: (enrollmentId: string, status: 'active' | 'inactive') => Promise<void>;
+  removeEnrollment: (enrollmentId: string) => Promise<void>;
+  saveLesson: (input: {
+    lessonId?: string;
+    classId: string;
+    disciplineId: string;
+    campusLevel: CampusLevel;
+    title: string;
+    summary: string;
+    content: string;
+    videoUrl?: string;
+    materialIds: string[];
+    order: number;
+    status: PublicationStatus;
+    reviewNotes?: string;
+  }) => Promise<string>;
+  updateLessonStatus: (lessonId: string, status: PublicationStatus) => Promise<void>;
+  deleteLesson: (lessonId: string) => Promise<void>;
+  saveActivity: (input: {
+    activityId?: string;
+    classId: string;
+    disciplineId: string;
+    campusLevel: CampusLevel;
+    title: string;
+    instructions: string;
+    activityType: 'objetiva' | 'discursiva' | 'mista';
+    dueDate?: string;
+    maxScore: number;
+    questionIds: string[];
+    prompts: string[];
+    status: PublicationStatus;
+  }) => Promise<string>;
+  updateActivityStatus: (activityId: string, status: PublicationStatus) => Promise<void>;
+  deleteActivity: (activityId: string) => Promise<void>;
+  submitActivity: (input: {
+    submissionId?: string;
+    activityId: string;
+    classId: string;
+    teacherId: string;
+    objectiveAnswers: Record<string, number>;
+    discursiveResponses: Record<string, string>;
+    objectiveScore: number;
+  }) => Promise<string>;
+  gradeSubmission: (
+    submissionId: string,
+    patch: {
+      manualScore: number;
+      finalScore: number;
+      feedback: string;
+      status: 'graded' | 'returned';
+    }
+  ) => Promise<void>;
+  registerStorageMetadata: (input: {
+    fileId?: string;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    checksumSha256?: string;
+    storageProvider: StorageProviderType;
+    bucket?: string;
+    objectPath: string;
+    downloadUrl: string;
+    category: StorageObjectCategory;
+    campusLevel: LibraryScope;
+    linkedMaterialId?: string;
+    version?: number;
+  }) => Promise<string>;
+  updateStorageMetadataRecord: (
+    fileId: string,
+    patch: Partial<Pick<StorageMetadataRecord, 'linkedMaterialId' | 'campusLevel' | 'archived' | 'version'>>
+  ) => Promise<void>;
+  deleteStorageMetadataRecord: (fileId: string) => Promise<void>;
+  writeAuditLog: (input: {
+    action: string;
+    targetCollection: string;
+    targetId: string;
+    summary: string;
+  }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -310,8 +495,40 @@ function addDaysIso(days: number): string {
 
 const GUEST_MODE_KEY = 'concurso_alepa_guest_mode';
 const GUEST_DATA_KEY = 'concurso_alepa_guest_data_v1';
+const LOCAL_PREFS_KEY = 'concurso_alepa_preferences_v1';
 const DEVICE_ID_KEY = 'concurso_alepa_device_id_v1';
 const GUEST_UID = 'guest_local';
+
+function loadCachedPreferences(): StudentPreferences {
+  try {
+    const raw = localStorage.getItem(LOCAL_PREFS_KEY);
+    if (!raw) return DEFAULT_STUDENT_PREFERENCES;
+    const parsed = JSON.parse(raw) as Partial<StudentPreferences>;
+    return {
+      ...DEFAULT_STUDENT_PREFERENCES,
+      ...parsed,
+      hiddenDashboardCards: Array.isArray(parsed.hiddenDashboardCards) ? parsed.hiddenDashboardCards : [],
+      dashboardCardOrder:
+        Array.isArray(parsed.dashboardCardOrder) && parsed.dashboardCardOrder.length > 0
+          ? parsed.dashboardCardOrder
+          : DEFAULT_STUDENT_PREFERENCES.dashboardCardOrder,
+      favoriteMaterialIds: Array.isArray(parsed.favoriteMaterialIds) ? parsed.favoriteMaterialIds : [],
+      favoriteQuestionIds: Array.isArray(parsed.favoriteQuestionIds) ? parsed.favoriteQuestionIds : [],
+      favoriteTopicIds: Array.isArray(parsed.favoriteTopicIds) ? parsed.favoriteTopicIds : [],
+      customShortcuts: Array.isArray(parsed.customShortcuts) ? parsed.customShortcuts : [],
+    };
+  } catch {
+    return DEFAULT_STUDENT_PREFERENCES;
+  }
+}
+
+function saveCachedPreferences(prefs: StudentPreferences): void {
+  try {
+    localStorage.setItem(LOCAL_PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // ignore storage errors
+  }
+}
 
 function getOrCreateDeviceId(): string {
   try {
@@ -349,6 +566,7 @@ function createDefaultGuestProfile(): UserProfile {
     uid: GUEST_UID,
     displayName: 'Visitante ALEPA',
     role: 'student',
+    preferences: loadCachedPreferences(),
     dailyGoalMinutes: CONCURSO_PROFILE.dailyGoalMinutes,
     examDate: CONCURSO_PROFILE.examDate,
     targetCargo: 'Cargo 03 – Técnico Legislativo (PL.AL.102)',
@@ -406,6 +624,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   const [, setAuthRefreshTick] = useState(0);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [localPreferences, setLocalPreferences] = useState<StudentPreferences>(() => loadCachedPreferences());
   const [authLoading, setAuthLoading] = useState(true);
   const [syncError, setSyncError] = useState<string | null>(null);
   // In-memory only (never localStorage/sessionStorage) per Workspace security rules
@@ -431,6 +650,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [adminSimuladoLists, setAdminSimuladoLists] = useState<SimuladoList[]>([]);
   const [publishedNotices, setPublishedNotices] = useState<PlatformNotice[]>([]);
   const [adminNotices, setAdminNotices] = useState<PlatformNotice[]>([]);
+  const [publishedExams, setPublishedExams] = useState<ExamConcurso[]>([]);
+  const [adminExams, setAdminExams] = useState<ExamConcurso[]>([]);
+  const [activeClasses, setActiveClasses] = useState<Classroom[]>([]);
+  const [adminClasses, setAdminClasses] = useState<Classroom[]>([]);
+  const [enrollments, setEnrollments] = useState<ClassEnrollment[]>([]);
+  const [publishedLessons, setPublishedLessons] = useState<Lesson[]>([]);
+  const [myLessons, setMyLessons] = useState<Lesson[]>([]);
+  const [adminLessons, setAdminLessons] = useState<Lesson[]>([]);
+  const [publishedActivities, setPublishedActivities] = useState<Activity[]>([]);
+  const [myActivities, setMyActivities] = useState<Activity[]>([]);
+  const [adminActivities, setAdminActivities] = useState<Activity[]>([]);
+  const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
+  const [storageMetadataRecords, setStorageMetadataRecords] = useState<StorageMetadataRecord[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [myFamilyMembership, setMyFamilyMembership] = useState<FamilyMember | null>(null);
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [accessSessions, setAccessSessions] = useState<AccessSession[]>([]);
@@ -444,22 +677,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isPrimaryAdmin = Boolean(user?.emailVerified && isAdminEmail(user?.email));
   const isVerifiedUser = Boolean(user?.emailVerified);
-  const effectiveRole: NormalizedUserRole = isVerifiedUser
-    ? normalizeUserRole(profile?.role, isPrimaryAdmin)
-    : 'student';
+  const isUserActive = profile?.active !== false;
+  const effectiveRole: NormalizedUserRole =
+    isVerifiedUser && isUserActive ? normalizeUserRole(profile?.role, isPrimaryAdmin) : 'student';
   const isAdmin = effectiveRole === 'admin' || effectiveRole === 'dev';
-  const isEditor = effectiveRole === 'editor';
+  const isEditor = isEditorRole(effectiveRole, isPrimaryAdmin) && effectiveRole === 'editor';
+  const isTeacher = isTeacherRole(effectiveRole, isPrimaryAdmin);
   const isDev = effectiveRole === 'dev';
-  const canAccessAdminPanel = isStaffRole(effectiveRole, isPrimaryAdmin) && isVerifiedUser;
-  const canManageUsers = canManageUsersRole(effectiveRole, isPrimaryAdmin) && isVerifiedUser;
+  const canAccessAdminPanel = canAccessAdminRole(effectiveRole, isPrimaryAdmin) && isVerifiedUser && isUserActive;
+  const canAccessTeacherPanel = canAccessTeacherRole(effectiveRole, isPrimaryAdmin) && isVerifiedUser && isUserActive;
+  const canManageUsers = canManageUsersRole(effectiveRole, isPrimaryAdmin) && isVerifiedUser && isUserActive;
   const canPublishShared =
     canAccessAdminPanel || Boolean(user?.emailVerified && myFamilyMembership?.active && myFamilyMembership?.canPublish);
 
   useEffect(() => {
-    if (!canAccessAdminPanel && activeWorkspaceModeState !== 'student') {
+    if (activeWorkspaceModeState === 'admin' && !canAccessAdminPanel) {
+      setActiveWorkspaceModeState('student');
+    } else if (activeWorkspaceModeState === 'teacher' && !canAccessTeacherPanel) {
       setActiveWorkspaceModeState('student');
     }
-  }, [canAccessAdminPanel, activeWorkspaceModeState]);
+  }, [canAccessAdminPanel, canAccessTeacherPanel, activeWorkspaceModeState]);
 
   const setActiveWorkspaceMode = useCallback(
     (mode: WorkspaceMode) => {
@@ -467,10 +704,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setActiveWorkspaceModeState('student');
         return;
       }
+      if (mode === 'teacher' && !canAccessTeacherPanel) {
+        setActiveWorkspaceModeState('student');
+        return;
+      }
       setActiveWorkspaceModeState(mode);
     },
-    [canAccessAdminPanel]
+    [canAccessAdminPanel, canAccessTeacherPanel]
   );
+
+  const preferences: StudentPreferences = React.useMemo(() => {
+    const base = profile?.preferences || localPreferences;
+    return {
+      ...DEFAULT_STUDENT_PREFERENCES,
+      ...base,
+      hiddenDashboardCards: Array.isArray(base?.hiddenDashboardCards) ? base.hiddenDashboardCards : [],
+      dashboardCardOrder:
+        Array.isArray(base?.dashboardCardOrder) && base.dashboardCardOrder.length > 0
+          ? base.dashboardCardOrder
+          : DEFAULT_STUDENT_PREFERENCES.dashboardCardOrder,
+      favoriteMaterialIds: Array.isArray(base?.favoriteMaterialIds) ? base.favoriteMaterialIds : [],
+      favoriteQuestionIds: Array.isArray(base?.favoriteQuestionIds) ? base.favoriteQuestionIds : [],
+      favoriteTopicIds: Array.isArray(base?.favoriteTopicIds) ? base.favoriteTopicIds : [],
+      customShortcuts: Array.isArray(base?.customShortcuts) ? base.customShortcuts : [],
+    };
+  }, [profile?.preferences, localPreferences]);
 
   const getIdToken = useCallback(async (): Promise<string | null> => {
     const current = auth.currentUser;
@@ -750,6 +1008,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setMyFamilyMembership(null);
     }
 
+    if (canAccessTeacherPanel) {
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'exams'), limit(60)),
+          (snap) => {
+            setAdminExams(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ExamConcurso, 'id'>) })));
+          },
+          () => {}
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'lessons'), where('authorId', '==', uid), limit(200)),
+          (snap) => {
+            setMyLessons(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Lesson, 'id'>) })));
+          },
+          () => {}
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'activities'), where('authorId', '==', uid), limit(200)),
+          (snap) => {
+            setMyActivities(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Activity, 'id'>) })));
+          },
+          () => {}
+        )
+      );
+    } else {
+      setAdminExams([]);
+      setMyLessons([]);
+      setMyActivities([]);
+    }
+
     if (canAccessAdminPanel) {
       unsubs.push(
         onSnapshot(
@@ -805,6 +1097,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           (err) => console.warn('Erro ao sincronizar avisos administrativos:', err)
         )
       );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'classes'), limit(150)),
+          (snap) => {
+            setAdminClasses(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Classroom, 'id'>) })));
+          },
+          () => {}
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'lessons'), limit(250)),
+          (snap) => {
+            setAdminLessons(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Lesson, 'id'>) })));
+          },
+          () => {}
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'activities'), limit(250)),
+          (snap) => {
+            setAdminActivities(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Activity, 'id'>) })));
+          },
+          () => {}
+        )
+      );
     } else {
       setAdminMaterials([]);
       setAdminQuestions([]);
@@ -812,6 +1131,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAdminTopics([]);
       setAdminSimuladoLists([]);
       setAdminNotices([]);
+      setAdminClasses([]);
+      setAdminLessons([]);
+      setAdminActivities([]);
     }
 
     if (canManageUsers) {
@@ -842,9 +1164,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           (err) => handleFirestoreError(err, OperationType.LIST, 'accessSessions')
         )
       );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'enrollments'), limit(300)),
+          (snap) => {
+            setEnrollments(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ClassEnrollment, 'id'>) })));
+          },
+          () => {}
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'submissions'), limit(300)),
+          (snap) => {
+            setSubmissions(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ActivitySubmission, 'id'>) })));
+          },
+          () => {}
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'storageMetadata'), limit(300)),
+          (snap) => {
+            setStorageMetadataRecords(
+              snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StorageMetadataRecord, 'id'>) }))
+            );
+          },
+          () => {}
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'auditLogs'), orderBy('createdAt', 'desc'), limit(200)),
+          (snap) => {
+            setAuditLogs(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AuditLogEntry, 'id'>) })));
+          },
+          () => {}
+        )
+      );
     } else {
       setAllUsers([]);
       setFamilyMembers([]);
+      setAuditLogs([]);
       unsubs.push(
         onSnapshot(
           query(collection(db, 'accessSessions'), where('userId', '==', uid)),
@@ -854,12 +1215,92 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           (err) => handleFirestoreError(err, OperationType.LIST, 'accessSessions')
         )
       );
+
+      if (canAccessTeacherPanel) {
+        unsubs.push(
+          onSnapshot(
+            query(collection(db, 'enrollments'), where('teacherId', '==', uid), limit(250)),
+            (snap) => {
+              setEnrollments(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ClassEnrollment, 'id'>) })));
+            },
+            () => {}
+          )
+        );
+        unsubs.push(
+          onSnapshot(
+            query(collection(db, 'submissions'), where('teacherId', '==', uid), limit(250)),
+            (snap) => {
+              setSubmissions(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ActivitySubmission, 'id'>) })));
+            },
+            () => {}
+          )
+        );
+        unsubs.push(
+          onSnapshot(
+            query(collection(db, 'storageMetadata'), where('uploadedBy', '==', uid), limit(200)),
+            (snap) => {
+              setStorageMetadataRecords(
+                snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StorageMetadataRecord, 'id'>) }))
+              );
+            },
+            () => {}
+          )
+        );
+      } else {
+        setStorageMetadataRecords([]);
+        unsubs.push(
+          onSnapshot(
+            query(collection(db, 'enrollments'), where('studentId', '==', uid), limit(100)),
+            (snap) => {
+              setEnrollments(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ClassEnrollment, 'id'>) })));
+            },
+            () => {}
+          )
+        );
+        unsubs.push(
+          onSnapshot(
+            query(collection(db, 'submissions'), where('studentId', '==', uid), limit(150)),
+            (snap) => {
+              setSubmissions(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ActivitySubmission, 'id'>) })));
+            },
+            () => {}
+          )
+        );
+      }
     }
+
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'classes'), where('active', '==', true), limit(100)),
+        (snap) => {
+          setActiveClasses(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Classroom, 'id'>) })));
+        },
+        () => {}
+      )
+    );
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'lessons'), where('status', '==', 'published'), limit(200)),
+        (snap) => {
+          setPublishedLessons(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Lesson, 'id'>) })));
+        },
+        () => {}
+      )
+    );
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'activities'), where('status', '==', 'published'), limit(200)),
+        (snap) => {
+          setPublishedActivities(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Activity, 'id'>) })));
+        },
+        () => {}
+      )
+    );
 
     return () => {
       unsubs.forEach((u) => u());
     };
-  }, [user, canAccessAdminPanel, canManageUsers]);
+  }, [user, canAccessAdminPanel, canAccessTeacherPanel, canManageUsers]);
 
   useEffect(() => {
     const unsubSharedMaterials = onSnapshot(
@@ -914,6 +1355,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       () => {}
     );
 
+    const unsubExams = onSnapshot(
+      query(collection(db, 'exams'), where('status', '==', 'published'), limit(50)),
+      (snap) => {
+        setPublishedExams(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ExamConcurso, 'id'>) })));
+      },
+      () => {}
+    );
+
     return () => {
       unsubSharedMaterials();
       unsubPublishedQuestions();
@@ -921,6 +1370,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       unsubTopics();
       unsubSimuladoLists();
       unsubNotices();
+      unsubExams();
     };
   }, []);
 
@@ -1109,6 +1559,88 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const allManagedNotices = React.useMemo(() => adminNotices, [adminNotices]);
+
+  const defaultAlepaExam: ExamConcurso = React.useMemo(
+    () => ({
+      id: 'exam_alepa_2026',
+      examId: 'exam_alepa_2026',
+      title: 'Concurso Público ALEPA 2026',
+      institution: 'Assembleia Legislativa do Estado do Pará · Banca Fundação CETAP',
+      code: 'ALEPA-2026',
+      year: 2026,
+      levels: ['superior', 'medio'],
+      positions: [
+        'Cargo 03 – Técnico Legislativo / Assessoramento Legislativo (PL.AL.102)',
+        'Cargo 04 – Assistente Legislativo / Assistência Administrativa (PL.AL.060)',
+      ],
+      examDate: CONCURSO_PROFILE.examDate,
+      status: 'published',
+      authorId: 'system_default',
+    }),
+    []
+  );
+
+  const exams = React.useMemo(() => {
+    const map = new Map<string, ExamConcurso>([[defaultAlepaExam.id, defaultAlepaExam]]);
+    publishedExams.forEach((ex) => {
+      if (ex.status === 'published') map.set(ex.id, ex);
+    });
+    return Array.from(map.values());
+  }, [defaultAlepaExam, publishedExams]);
+
+  const allManagedExams = React.useMemo(() => {
+    const map = new Map<string, ExamConcurso>([[defaultAlepaExam.id, defaultAlepaExam]]);
+    adminExams.forEach((ex) => map.set(ex.id, ex));
+    return Array.from(map.values());
+  }, [defaultAlepaExam, adminExams]);
+
+  const classes = React.useMemo(
+    () => activeClasses.filter((c) => c.active && c.status === 'published'),
+    [activeClasses]
+  );
+
+  const allManagedClasses = React.useMemo(() => {
+    const map = new Map<string, Classroom>();
+    activeClasses.forEach((c) => map.set(c.id, c));
+    adminClasses.forEach((c) => map.set(c.id, c));
+    return Array.from(map.values());
+  }, [activeClasses, adminClasses]);
+
+  const lessons = React.useMemo(() => {
+    const map = new Map<string, Lesson>();
+    publishedLessons.forEach((l) => map.set(l.id, l));
+    myLessons.forEach((l) => {
+      if (l.status !== 'archived') map.set(l.id, l);
+    });
+    return Array.from(map.values()).sort((a, b) => a.order - b.order);
+  }, [publishedLessons, myLessons]);
+
+  const allManagedLessons = React.useMemo(() => {
+    const map = new Map<string, Lesson>();
+    adminLessons.forEach((l) => map.set(l.id, l));
+    myLessons.forEach((l) => {
+      if (!map.has(l.id)) map.set(l.id, l);
+    });
+    return Array.from(map.values()).sort((a, b) => a.order - b.order);
+  }, [adminLessons, myLessons]);
+
+  const activities = React.useMemo(() => {
+    const map = new Map<string, Activity>();
+    publishedActivities.forEach((a) => map.set(a.id, a));
+    myActivities.forEach((a) => {
+      if (a.status !== 'archived') map.set(a.id, a);
+    });
+    return Array.from(map.values());
+  }, [publishedActivities, myActivities]);
+
+  const allManagedActivities = React.useMemo(() => {
+    const map = new Map<string, Activity>();
+    adminActivities.forEach((a) => map.set(a.id, a));
+    myActivities.forEach((a) => {
+      if (!map.has(a.id)) map.set(a.id, a);
+    });
+    return Array.from(map.values());
+  }, [adminActivities, myActivities]);
 
   const getCampusDisciplines = useCallback(
     (campus: CampusLevel, medioCargoGroup: MedioCargoGroup = 'cargo_01_04'): Discipline[] => {
@@ -1877,6 +2409,97 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const writeAuditLog = useCallback(
+    async (input: {
+      action: string;
+      targetCollection: string;
+      targetId: string;
+      summary: string;
+    }) => {
+      const current = auth.currentUser;
+      if (!current || !current.emailVerified) return;
+      const logId = sanitizeId(`log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`);
+      try {
+        await setDoc(doc(db, 'auditLogs', logId), {
+          logId,
+          actorId: current.uid,
+          actorEmail: (current.email || '').trim().toLowerCase().slice(0, 160),
+          actorRole: effectiveRole,
+          action: input.action.trim().slice(0, 80),
+          targetCollection: input.targetCollection.trim().slice(0, 80),
+          targetId: input.targetId.trim().slice(0, 128),
+          summary: input.summary.trim().slice(0, 400),
+          createdAt: serverTimestamp(),
+        });
+      } catch {
+        // Non-blocking audit log write
+      }
+    },
+    [effectiveRole]
+  );
+
+  const updateStudentPreferences = async (patch: Partial<StudentPreferences>) => {
+    const nextPrefs: StudentPreferences = {
+      ...preferences,
+      ...patch,
+      hiddenDashboardCards: (patch.hiddenDashboardCards ?? preferences.hiddenDashboardCards).slice(0, 20),
+      dashboardCardOrder: (patch.dashboardCardOrder ?? preferences.dashboardCardOrder).slice(0, 20),
+      favoriteMaterialIds: (patch.favoriteMaterialIds ?? preferences.favoriteMaterialIds).slice(0, 100),
+      favoriteQuestionIds: (patch.favoriteQuestionIds ?? preferences.favoriteQuestionIds).slice(0, 100),
+      favoriteTopicIds: (patch.favoriteTopicIds ?? preferences.favoriteTopicIds).slice(0, 100),
+      customShortcuts: (patch.customShortcuts ?? preferences.customShortcuts).slice(0, 10),
+    };
+    setLocalPreferences(nextPrefs);
+    saveCachedPreferences(nextPrefs);
+
+    if (isGuest && !auth.currentUser) {
+      persistGuestPatch((prev) => ({
+        ...prev,
+        profile: {
+          ...prev.profile,
+          preferences: nextPrefs,
+        },
+      }));
+      return;
+    }
+
+    const current = auth.currentUser;
+    if (!current) return;
+    try {
+      await updateDoc(doc(db, 'users', current.uid), {
+        preferences: nextPrefs,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      setSyncError('Erro ao sincronizar suas preferências.');
+      handleFirestoreError(err, OperationType.UPDATE, `users/${current.uid}`);
+    }
+  };
+
+  const toggleFavoriteMaterial = async (materialId: string) => {
+    const exists = preferences.favoriteMaterialIds.includes(materialId);
+    const next = exists
+      ? preferences.favoriteMaterialIds.filter((id) => id !== materialId)
+      : [materialId, ...preferences.favoriteMaterialIds].slice(0, 100);
+    await updateStudentPreferences({ favoriteMaterialIds: next });
+  };
+
+  const toggleFavoriteQuestion = async (questionId: string) => {
+    const exists = preferences.favoriteQuestionIds.includes(questionId);
+    const next = exists
+      ? preferences.favoriteQuestionIds.filter((id) => id !== questionId)
+      : [questionId, ...preferences.favoriteQuestionIds].slice(0, 100);
+    await updateStudentPreferences({ favoriteQuestionIds: next });
+  };
+
+  const toggleFavoriteTopic = async (topicId: string) => {
+    const exists = preferences.favoriteTopicIds.includes(topicId);
+    const next = exists
+      ? preferences.favoriteTopicIds.filter((id) => id !== topicId)
+      : [topicId, ...preferences.favoriteTopicIds].slice(0, 100);
+    await updateStudentPreferences({ favoriteTopicIds: next });
+  };
+
   const updateUserRole = async (targetUid: string, nextRole: NormalizedUserRole) => {
     if (!canManageUsers) {
       throw new Error('Apenas Administrador ou Desenvolvedor pode alterar permissões.');
@@ -1888,8 +2511,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: nextRole,
         updatedAt: serverTimestamp(),
       });
+      await writeAuditLog({
+        action: 'update_user_role',
+        targetCollection: 'users',
+        targetId: safeUid,
+        summary: `Perfil de acesso alterado para ${nextRole}.`,
+      });
     } catch (err) {
       setSyncError('Erro ao atualizar perfil de acesso do usuário.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const toggleUserActive = async (targetUid: string, active: boolean) => {
+    if (!canManageUsers) {
+      throw new Error('Apenas Administrador Principal pode ativar ou desativar usuários.');
+    }
+    const safeUid = sanitizeId(targetUid);
+    const path = `users/${safeUid}`;
+    try {
+      await updateDoc(doc(db, 'users', safeUid), {
+        active: Boolean(active),
+        updatedAt: serverTimestamp(),
+      });
+      await writeAuditLog({
+        action: active ? 'activate_user' : 'deactivate_user',
+        targetCollection: 'users',
+        targetId: safeUid,
+        summary: active ? 'Usuário reativado.' : 'Usuário desativado (dados preservados).',
+      });
+    } catch (err) {
+      setSyncError('Erro ao alterar status da conta do usuário.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const updateUserAssignments = async (
+    targetUid: string,
+    patch: { assignedClassIds?: string[]; assignedDisciplineIds?: string[] }
+  ) => {
+    if (!canManageUsers) {
+      throw new Error('Apenas Administrador Principal pode vincular turmas e disciplinas.');
+    }
+    const safeUid = sanitizeId(targetUid);
+    const path = `users/${safeUid}`;
+    try {
+      const updates: Record<string, unknown> = { updatedAt: serverTimestamp() };
+      if (patch.assignedClassIds !== undefined) {
+        updates.assignedClassIds = patch.assignedClassIds.slice(0, 50);
+      }
+      if (patch.assignedDisciplineIds !== undefined) {
+        updates.assignedDisciplineIds = patch.assignedDisciplineIds.slice(0, 50);
+      }
+      await updateDoc(doc(db, 'users', safeUid), updates);
+      await writeAuditLog({
+        action: 'update_user_assignments',
+        targetCollection: 'users',
+        targetId: safeUid,
+        summary: 'Vínculos de turmas e disciplinas atualizados.',
+      });
+    } catch (err) {
+      setSyncError('Erro ao vincular turmas/disciplinas.');
       handleFirestoreError(err, OperationType.UPDATE, path);
     }
   };
@@ -1911,6 +2593,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     relevanceTier?: MaterialRelevanceTier;
     campusLevel?: LibraryScope;
     status?: PublicationStatus;
+    classId?: string;
+    keywords?: string[];
+    author?: string;
+    edition?: string;
+    year?: number;
+    checksumSha256?: string;
+    storageProvider?: StorageProviderType;
+    storagePath?: string;
+    reviewNotes?: string;
     fileName?: string;
     description?: string;
     isShared?: boolean;
@@ -1964,7 +2655,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const current = ensureSignedIn();
     const resolvedStatus: PublicationStatus = canPublishShared
       ? input.status || (input.isShared ? 'published' : 'draft')
-      : 'draft';
+      : isTeacher && input.status === 'in_review'
+        ? 'in_review'
+        : 'draft';
     const canShare = Boolean(canPublishShared && resolvedStatus === 'published' && input.isShared !== false);
     const path = `materials/${materialId}`;
     try {
@@ -1989,6 +2682,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (input.pricing) payload.pricing = input.pricing;
       if (input.relevanceTier) payload.relevanceTier = input.relevanceTier;
       if (input.campusLevel) payload.campusLevel = input.campusLevel;
+      if (input.classId) payload.classId = sanitizeId(input.classId);
+      if (input.keywords?.length) {
+        payload.keywords = input.keywords.map((k) => k.trim()).filter(Boolean).slice(0, 20);
+      }
+      if (input.author) payload.author = input.author.trim().slice(0, 160);
+      if (input.edition) payload.edition = input.edition.trim().slice(0, 80);
+      if (input.year) payload.year = Math.max(1900, Math.min(2100, Math.round(input.year)));
+      if (input.checksumSha256) payload.checksumSha256 = input.checksumSha256.trim().slice(0, 128);
+      if (input.storageProvider) payload.storageProvider = input.storageProvider;
+      if (input.storagePath) payload.storagePath = input.storagePath.trim().slice(0, 500);
+      if (input.reviewNotes) payload.reviewNotes = input.reviewNotes.trim().slice(0, 600);
       payload.publishedAt = (input.publishedAt || todayIso).slice(0, 20);
       payload.lastVerifiedAt = (input.lastVerifiedAt || todayIso).slice(0, 20);
       if (input.linkStatus) payload.linkStatus = input.linkStatus;
@@ -2001,6 +2705,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (input.versionNote) payload.versionNote = input.versionNote.trim().slice(0, 300);
 
       await setDoc(doc(db, 'materials', materialId), payload);
+      if (canAccessTeacherPanel) {
+        await writeAuditLog({
+          action: 'create_material',
+          targetCollection: 'materials',
+          targetId: materialId,
+          summary: `Material cadastrado (${resolvedStatus}): ${input.title.trim().slice(0, 100)}`,
+        });
+      }
     } catch (err) {
       setSyncError('Erro ao salvar material.');
       handleFirestoreError(err, OperationType.CREATE, path);
@@ -2040,6 +2752,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (patch.isOfficialContent !== undefined) updates.isOfficialContent = Boolean(patch.isOfficialContent);
       if (patch.relevanceTier !== undefined) updates.relevanceTier = patch.relevanceTier;
       if (patch.campusLevel !== undefined) updates.campusLevel = patch.campusLevel;
+      if (patch.classId !== undefined) updates.classId = patch.classId.slice(0, 128);
+      if (patch.keywords !== undefined) updates.keywords = patch.keywords.slice(0, 20);
+      if (patch.author !== undefined) updates.author = patch.author.trim().slice(0, 160);
+      if (patch.edition !== undefined) updates.edition = patch.edition.trim().slice(0, 80);
+      if (patch.year !== undefined) updates.year = Math.max(1900, Math.min(2100, Math.round(patch.year)));
+      if (patch.checksumSha256 !== undefined) updates.checksumSha256 = patch.checksumSha256.trim().slice(0, 128);
+      if (patch.storageProvider !== undefined) updates.storageProvider = patch.storageProvider;
+      if (patch.storagePath !== undefined) updates.storagePath = patch.storagePath.trim().slice(0, 500);
+      if (patch.reviewNotes !== undefined && canAccessAdminPanel) updates.reviewNotes = patch.reviewNotes.trim().slice(0, 600);
       if (patch.description !== undefined) updates.description = patch.description.slice(0, 1000);
       if (patch.fileName !== undefined) updates.fileName = patch.fileName.slice(0, 240);
       if (patch.allowDownload !== undefined) updates.allowDownload = Boolean(patch.allowDownload);
@@ -2051,9 +2772,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (canPublishShared && patch.status !== undefined) {
         updates.status = patch.status;
         updates.isShared = patch.status === 'published';
+        if (patch.status === 'approved' || patch.status === 'published') {
+          updates.reviewedBy = current.uid;
+        }
       } else if (canPublishShared && patch.isShared !== undefined) {
         updates.isShared = Boolean(patch.isShared);
         updates.status = patch.isShared ? 'published' : 'draft';
+      } else if (isTeacher && (patch.status === 'draft' || patch.status === 'in_review')) {
+        updates.status = patch.status;
       }
 
       await updateDoc(doc(db, 'materials', safeId), updates);
@@ -2074,8 +2800,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await updateDoc(doc(db, 'materials', safeId), {
         status,
         isShared: status === 'published',
+        reviewedBy: current.uid,
         updatedBy: current.uid,
         updatedAt: serverTimestamp(),
+      });
+      await writeAuditLog({
+        action: 'update_material_status',
+        targetCollection: 'materials',
+        targetId: safeId,
+        summary: `Status do material alterado para ${status}.`,
       });
     } catch (err) {
       setSyncError('Erro ao alterar status de publicação do material.');
@@ -2097,6 +2830,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const path = `materials/${safeId}`;
     try {
       await deleteDoc(doc(db, 'materials', safeId));
+      if (canAccessAdminPanel) {
+        await writeAuditLog({
+          action: 'delete_material',
+          targetCollection: 'materials',
+          targetId: safeId,
+          summary: `Material removido do catálogo: ${safeId}.`,
+        });
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, path);
     }
@@ -2112,6 +2853,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     legalBasis?: string;
     source?: string;
     originType?: QuestionOriginType;
+    difficulty?: QuestionDifficulty;
+    questionFormat?: QuestionFormat;
+    classId?: string;
     escolaridade?: CampusLevel;
     isOfficial?: boolean;
     isPublished?: boolean;
@@ -2136,6 +2880,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           input.source || (isOfficial ? 'Prova / Fonte Oficial' : 'Treinamento Complementar (Não Oficial)')
         ).slice(0, 160),
         originType,
+        difficulty: input.difficulty,
+        questionFormat: input.questionFormat,
         escolaridade: input.escolaridade,
         isOfficial,
         isPublished: false,
@@ -2151,7 +2897,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const current = ensureSignedIn();
     const resolvedStatus: PublicationStatus = canPublishShared
       ? input.status || (input.isPublished ? 'published' : 'draft')
-      : 'draft';
+      : isTeacher && input.status === 'in_review'
+        ? 'in_review'
+        : 'draft';
     const canPublish = Boolean(canPublishShared && resolvedStatus === 'published' && input.isPublished !== false);
     const path = `sharedQuestions/${questionId}`;
     try {
@@ -2174,6 +2922,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
+      if (input.difficulty) payload.difficulty = input.difficulty;
+      if (input.questionFormat) payload.questionFormat = input.questionFormat;
+      if (input.classId) payload.classId = sanitizeId(input.classId);
       if (input.escolaridade) payload.escolaridade = input.escolaridade;
       await setDoc(doc(db, 'sharedQuestions', questionId), payload);
     } catch (err) {
@@ -2202,6 +2953,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (patch.legalBasis !== undefined) updates.legalBasis = patch.legalBasis.slice(0, 400);
       if (patch.source !== undefined) updates.source = patch.source.slice(0, 160);
       if (patch.originType !== undefined) updates.originType = patch.originType;
+      if (patch.difficulty !== undefined) updates.difficulty = patch.difficulty;
+      if (patch.questionFormat !== undefined) updates.questionFormat = patch.questionFormat;
+      if (patch.classId !== undefined) updates.classId = patch.classId.slice(0, 128);
       if (patch.escolaridade !== undefined) updates.escolaridade = patch.escolaridade;
       if (patch.isOfficial !== undefined) updates.isOfficial = Boolean(patch.isOfficial);
       if (canPublishShared && patch.status !== undefined) {
@@ -2210,6 +2964,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (canPublishShared && patch.isPublished !== undefined) {
         updates.isPublished = Boolean(patch.isPublished);
         updates.status = patch.isPublished ? 'published' : 'draft';
+      } else if (isTeacher && (patch.status === 'draft' || patch.status === 'in_review')) {
+        updates.status = patch.status;
       }
       await updateDoc(doc(db, 'sharedQuestions', safeId), updates);
     } catch (err) {
@@ -2508,6 +3264,556 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const saveExamConcurso = async (input: {
+    examId?: string;
+    title: string;
+    institution: string;
+    code: string;
+    year: number;
+    levels: CampusLevel[];
+    positions: string[];
+    examDate?: string;
+    status: PublicationStatus;
+  }): Promise<string> => {
+    if (!canManageUsers) {
+      throw new Error('Apenas Administrador Principal pode cadastrar concursos e editais.');
+    }
+    const current = ensureSignedIn();
+    const examId = sanitizeId(input.examId || `exam_${Date.now().toString(36)}`);
+    const path = `exams/${examId}`;
+    try {
+      const ref = doc(db, 'exams', examId);
+      const snap = await getDoc(ref);
+      const commonFields: Record<string, unknown> = {
+        title: input.title.trim().slice(0, 180),
+        institution: input.institution.trim().slice(0, 160),
+        code: input.code.trim().slice(0, 60),
+        year: Math.max(2000, Math.min(2100, Math.round(input.year))),
+        levels: input.levels.length ? input.levels.slice(0, 10) : ['superior'],
+        positions: input.positions.map((p) => p.trim()).filter(Boolean).slice(0, 25),
+        status: input.status,
+        updatedAt: serverTimestamp(),
+      };
+      if (input.examDate?.trim()) commonFields.examDate = input.examDate.trim().slice(0, 20);
+      if (snap.exists()) {
+        await updateDoc(ref, commonFields);
+      } else {
+        await setDoc(ref, {
+          examId,
+          ...commonFields,
+          authorId: current.uid,
+          createdAt: serverTimestamp(),
+        });
+      }
+      await writeAuditLog({
+        action: snap.exists() ? 'update_exam' : 'create_exam',
+        targetCollection: 'exams',
+        targetId: examId,
+        summary: `Concurso ${input.title.trim().slice(0, 100)} (${input.status})`,
+      });
+      return examId;
+    } catch (err) {
+      setSyncError('Erro ao salvar concurso.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+      return examId;
+    }
+  };
+
+  const updateExamStatus = async (examId: string, status: PublicationStatus) => {
+    if (!canManageUsers) throw new Error('Acesso restrito ao Administrador Principal.');
+    const safeId = sanitizeId(examId);
+    const path = `exams/${safeId}`;
+    try {
+      await updateDoc(doc(db, 'exams', safeId), { status, updatedAt: serverTimestamp() });
+    } catch (err) {
+      setSyncError('Erro ao atualizar status do concurso.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const saveClassroom = async (input: {
+    classId?: string;
+    name: string;
+    code: string;
+    examId: string;
+    campusLevel: CampusLevel;
+    disciplineIds: string[];
+    teacherIds: string[];
+    description?: string;
+    active: boolean;
+    status: PublicationStatus;
+  }): Promise<string> => {
+    if (!canAccessTeacherPanel) {
+      throw new Error('Acesso restrito.');
+    }
+    const current = ensureSignedIn();
+    const classId = sanitizeId(input.classId || `cls_${Date.now().toString(36)}`);
+    const path = `classes/${classId}`;
+    try {
+      const ref = doc(db, 'classes', classId);
+      const snap = await getDoc(ref);
+      const commonFields: Record<string, unknown> = {
+        name: input.name.trim().slice(0, 160),
+        code: input.code.trim().slice(0, 40),
+        examId: sanitizeId(input.examId || 'exam_alepa_2026'),
+        campusLevel: input.campusLevel,
+        disciplineIds: input.disciplineIds.slice(0, 30),
+        teacherIds: input.teacherIds.slice(0, 20),
+        description: (input.description || '').trim().slice(0, 800),
+        active: Boolean(input.active),
+        status: input.status,
+        updatedAt: serverTimestamp(),
+      };
+      if (snap.exists()) {
+        await updateDoc(ref, commonFields);
+      } else {
+        if (!canManageUsers) {
+          throw new Error('Apenas Administrador Principal pode criar novas turmas.');
+        }
+        await setDoc(ref, {
+          classId,
+          ...commonFields,
+          authorId: current.uid,
+          createdAt: serverTimestamp(),
+        });
+      }
+      await writeAuditLog({
+        action: snap.exists() ? 'update_classroom' : 'create_classroom',
+        targetCollection: 'classes',
+        targetId: classId,
+        summary: `Turma ${input.name.trim().slice(0, 100)} (${input.code})`,
+      });
+      return classId;
+    } catch (err) {
+      setSyncError('Erro ao salvar turma.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+      return classId;
+    }
+  };
+
+  const updateClassroomStatus = async (classId: string, status: PublicationStatus) => {
+    if (!canManageUsers) throw new Error('Acesso restrito.');
+    const safeId = sanitizeId(classId);
+    try {
+      await updateDoc(doc(db, 'classes', safeId), { status, updatedAt: serverTimestamp() });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `classes/${safeId}`);
+    }
+  };
+
+  const enrollStudentInClass = async (input: {
+    classId: string;
+    studentId?: string;
+    studentName?: string;
+    studentEmail?: string;
+    teacherId?: string;
+  }): Promise<string> => {
+    const current = ensureSignedIn();
+    const safeClassId = sanitizeId(input.classId);
+    const studentId = sanitizeId(input.studentId || current.uid);
+    const enrollmentId = sanitizeId(`enr_${safeClassId}_${studentId}`);
+    const path = `enrollments/${enrollmentId}`;
+    try {
+      const targetClass = allManagedClasses.find((c) => c.id === safeClassId);
+      const teacherId = sanitizeId(input.teacherId || targetClass?.teacherIds[0] || current.uid);
+      const ref = doc(db, 'enrollments', enrollmentId);
+      const snap = await getDoc(ref);
+      const payload: Record<string, unknown> = {
+        enrollmentId,
+        classId: safeClassId,
+        studentId,
+        studentName: (input.studentName || profile?.displayName || current.displayName || 'Estudante').trim().slice(0, 120),
+        teacherId,
+        status: 'active',
+        updatedAt: serverTimestamp(),
+      };
+      if (input.studentEmail?.trim()) {
+        payload.studentEmail = input.studentEmail.trim().toLowerCase().slice(0, 160);
+      }
+      if (snap.exists()) {
+        await updateDoc(ref, { status: 'active', updatedAt: serverTimestamp() });
+      } else {
+        await setDoc(ref, { ...payload, createdAt: serverTimestamp() });
+      }
+      return enrollmentId;
+    } catch (err) {
+      setSyncError('Erro ao realizar matrícula na turma.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+      return enrollmentId;
+    }
+  };
+
+  const updateEnrollmentStatus = async (enrollmentId: string, status: 'active' | 'inactive') => {
+    ensureSignedIn();
+    const safeId = sanitizeId(enrollmentId);
+    try {
+      await updateDoc(doc(db, 'enrollments', safeId), { status, updatedAt: serverTimestamp() });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `enrollments/${safeId}`);
+    }
+  };
+
+  const removeEnrollment = async (enrollmentId: string) => {
+    ensureSignedIn();
+    const safeId = sanitizeId(enrollmentId);
+    try {
+      await deleteDoc(doc(db, 'enrollments', safeId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `enrollments/${safeId}`);
+    }
+  };
+
+  const saveLesson = async (input: {
+    lessonId?: string;
+    classId: string;
+    disciplineId: string;
+    campusLevel: CampusLevel;
+    title: string;
+    summary: string;
+    content: string;
+    videoUrl?: string;
+    materialIds: string[];
+    order: number;
+    status: PublicationStatus;
+    reviewNotes?: string;
+  }): Promise<string> => {
+    if (!canAccessTeacherPanel) {
+      throw new Error('Acesso restrito a professores, editores e administradores.');
+    }
+    const current = ensureSignedIn();
+    const lessonId = sanitizeId(input.lessonId || `les_${Date.now().toString(36)}`);
+    const path = `lessons/${lessonId}`;
+    try {
+      const ref = doc(db, 'lessons', lessonId);
+      const snap = await getDoc(ref);
+      const commonFields: Record<string, unknown> = {
+        classId: sanitizeId(input.classId),
+        disciplineId: input.disciplineId.trim().slice(0, 80),
+        campusLevel: input.campusLevel,
+        title: input.title.trim().slice(0, 200),
+        summary: input.summary.trim().slice(0, 1000),
+        content: input.content.trim().slice(0, 12000),
+        materialIds: input.materialIds.slice(0, 20),
+        order: Math.max(0, Math.min(500, Math.round(input.order))),
+        status: input.status,
+        updatedAt: serverTimestamp(),
+      };
+      if (input.videoUrl?.trim()) commonFields.videoUrl = input.videoUrl.trim().slice(0, 1000);
+      if (canAccessAdminPanel && input.reviewNotes?.trim()) {
+        commonFields.reviewNotes = input.reviewNotes.trim().slice(0, 600);
+        commonFields.reviewedBy = current.uid;
+      }
+      if (snap.exists()) {
+        await updateDoc(ref, commonFields);
+      } else {
+        await setDoc(ref, {
+          lessonId,
+          ...commonFields,
+          authorId: current.uid,
+          createdAt: serverTimestamp(),
+        });
+      }
+      await writeAuditLog({
+        action: snap.exists() ? 'update_lesson' : 'create_lesson',
+        targetCollection: 'lessons',
+        targetId: lessonId,
+        summary: `Aula "${input.title.trim().slice(0, 90)}" (${input.status})`,
+      });
+      return lessonId;
+    } catch (err) {
+      setSyncError('Erro ao salvar aula.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+      return lessonId;
+    }
+  };
+
+  const updateLessonStatus = async (lessonId: string, status: PublicationStatus) => {
+    if (!canAccessTeacherPanel) throw new Error('Acesso restrito.');
+    const safeId = sanitizeId(lessonId);
+    try {
+      await updateDoc(doc(db, 'lessons', safeId), { status, updatedAt: serverTimestamp() });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `lessons/${safeId}`);
+    }
+  };
+
+  const deleteLesson = async (lessonId: string) => {
+    if (!canAccessTeacherPanel) throw new Error('Acesso restrito.');
+    const safeId = sanitizeId(lessonId);
+    try {
+      await deleteDoc(doc(db, 'lessons', safeId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `lessons/${safeId}`);
+    }
+  };
+
+  const saveActivity = async (input: {
+    activityId?: string;
+    classId: string;
+    disciplineId: string;
+    campusLevel: CampusLevel;
+    title: string;
+    instructions: string;
+    activityType: 'objetiva' | 'discursiva' | 'mista';
+    dueDate?: string;
+    maxScore: number;
+    questionIds: string[];
+    prompts: string[];
+    status: PublicationStatus;
+  }): Promise<string> => {
+    if (!canAccessTeacherPanel) {
+      throw new Error('Acesso restrito a professores, editores e administradores.');
+    }
+    const current = ensureSignedIn();
+    const activityId = sanitizeId(input.activityId || `act_${Date.now().toString(36)}`);
+    const path = `activities/${activityId}`;
+    try {
+      const ref = doc(db, 'activities', activityId);
+      const snap = await getDoc(ref);
+      const commonFields: Record<string, unknown> = {
+        classId: sanitizeId(input.classId),
+        disciplineId: input.disciplineId.trim().slice(0, 80),
+        campusLevel: input.campusLevel,
+        title: input.title.trim().slice(0, 200),
+        instructions: input.instructions.trim().slice(0, 3000),
+        activityType: input.activityType,
+        maxScore: Math.max(0, Math.min(1000, Number(input.maxScore))),
+        questionIds: input.questionIds.slice(0, 100),
+        prompts: input.prompts.map((p) => p.trim()).filter(Boolean).slice(0, 10),
+        status: input.status,
+        updatedAt: serverTimestamp(),
+      };
+      if (input.dueDate?.trim()) commonFields.dueDate = input.dueDate.trim().slice(0, 20);
+      if (snap.exists()) {
+        await updateDoc(ref, commonFields);
+      } else {
+        await setDoc(ref, {
+          activityId,
+          ...commonFields,
+          authorId: current.uid,
+          createdAt: serverTimestamp(),
+        });
+      }
+      await writeAuditLog({
+        action: snap.exists() ? 'update_activity' : 'create_activity',
+        targetCollection: 'activities',
+        targetId: activityId,
+        summary: `Atividade "${input.title.trim().slice(0, 90)}" (${input.status})`,
+      });
+      return activityId;
+    } catch (err) {
+      setSyncError('Erro ao salvar atividade.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+      return activityId;
+    }
+  };
+
+  const updateActivityStatus = async (activityId: string, status: PublicationStatus) => {
+    if (!canAccessTeacherPanel) throw new Error('Acesso restrito.');
+    const safeId = sanitizeId(activityId);
+    try {
+      await updateDoc(doc(db, 'activities', safeId), { status, updatedAt: serverTimestamp() });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `activities/${safeId}`);
+    }
+  };
+
+  const deleteActivity = async (activityId: string) => {
+    if (!canAccessTeacherPanel) throw new Error('Acesso restrito.');
+    const safeId = sanitizeId(activityId);
+    try {
+      await deleteDoc(doc(db, 'activities', safeId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `activities/${safeId}`);
+    }
+  };
+
+  const submitActivity = async (input: {
+    submissionId?: string;
+    activityId: string;
+    classId: string;
+    teacherId: string;
+    objectiveAnswers: Record<string, number>;
+    discursiveResponses: Record<string, string>;
+    objectiveScore: number;
+  }): Promise<string> => {
+    const current = ensureSignedIn();
+    const safeActivityId = sanitizeId(input.activityId);
+    const submissionId = sanitizeId(input.submissionId || `sub_${safeActivityId}_${current.uid}`);
+    const path = `submissions/${submissionId}`;
+    try {
+      const ref = doc(db, 'submissions', submissionId);
+      const snap = await getDoc(ref);
+      const objectiveScore = Math.max(0, Math.min(1000, Number(input.objectiveScore) || 0));
+      if (snap.exists()) {
+        await updateDoc(ref, {
+          objectiveAnswers: input.objectiveAnswers,
+          discursiveResponses: input.discursiveResponses,
+          objectiveScore,
+          finalScore: objectiveScore,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(ref, {
+          submissionId,
+          activityId: safeActivityId,
+          classId: sanitizeId(input.classId),
+          studentId: current.uid,
+          studentName: (profile?.displayName || current.displayName || 'Estudante').trim().slice(0, 120),
+          teacherId: sanitizeId(input.teacherId || current.uid),
+          objectiveAnswers: input.objectiveAnswers,
+          discursiveResponses: input.discursiveResponses,
+          objectiveScore,
+          manualScore: 0,
+          finalScore: objectiveScore,
+          status: 'submitted',
+          revisionHistory: [],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+      return submissionId;
+    } catch (err) {
+      setSyncError('Erro ao enviar atividade.');
+      handleFirestoreError(err, OperationType.WRITE, path);
+      return submissionId;
+    }
+  };
+
+  const gradeSubmission = async (
+    submissionId: string,
+    patch: {
+      manualScore: number;
+      finalScore: number;
+      feedback: string;
+      status: 'graded' | 'returned';
+    }
+  ) => {
+    if (!canAccessTeacherPanel) {
+      throw new Error('Apenas professores ou administradores podem corrigir entregas.');
+    }
+    const current = ensureSignedIn();
+    const safeId = sanitizeId(submissionId);
+    const path = `submissions/${safeId}`;
+    try {
+      const existing = submissions.find((s) => s.id === safeId);
+      const historyItem: SubmissionRevision = {
+        gradedBy: current.uid,
+        score: Math.max(0, Math.min(1000, Number(patch.finalScore))),
+        feedback: patch.feedback.trim().slice(0, 500),
+        gradedAt: new Date().toISOString(),
+      };
+      const nextHistory = [...(existing?.revisionHistory || []), historyItem].slice(-20);
+      await updateDoc(doc(db, 'submissions', safeId), {
+        manualScore: Math.max(0, Math.min(1000, Number(patch.manualScore))),
+        finalScore: Math.max(0, Math.min(1000, Number(patch.finalScore))),
+        feedback: patch.feedback.trim().slice(0, 4000),
+        status: patch.status,
+        gradedBy: current.uid,
+        revisionHistory: nextHistory,
+        updatedAt: serverTimestamp(),
+      });
+      await writeAuditLog({
+        action: 'grade_submission',
+        targetCollection: 'submissions',
+        targetId: safeId,
+        summary: `Entrega avaliada com nota ${patch.finalScore} (${patch.status}).`,
+      });
+    } catch (err) {
+      setSyncError('Erro ao salvar correção da atividade.');
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const registerStorageMetadata = async (input: {
+    fileId?: string;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    checksumSha256?: string;
+    storageProvider: StorageProviderType;
+    bucket?: string;
+    objectPath: string;
+    downloadUrl: string;
+    category: StorageObjectCategory;
+    campusLevel: LibraryScope;
+    linkedMaterialId?: string;
+    version?: number;
+  }): Promise<string> => {
+    if (!canAccessTeacherPanel) throw new Error('Acesso restrito.');
+    const current = ensureSignedIn();
+    const fileId = sanitizeId(input.fileId || `file_${Date.now().toString(36)}`);
+    const path = `storageMetadata/${fileId}`;
+    try {
+      const payload: Record<string, unknown> = {
+        fileId,
+        fileName: input.fileName.trim().slice(0, 240),
+        mimeType: input.mimeType.trim().slice(0, 120),
+        sizeBytes: Math.max(0, Math.min(500000000, Math.round(input.sizeBytes))),
+        storageProvider: input.storageProvider,
+        bucket: (input.bucket || FIREBASE_STORAGE_BUCKET || '').slice(0, 160),
+        objectPath: input.objectPath.trim().slice(0, 500),
+        downloadUrl: input.downloadUrl.trim().slice(0, 2000),
+        category: input.category,
+        campusLevel: input.campusLevel,
+        version: Math.max(1, Math.min(1000, Math.round(input.version ?? 1))),
+        archived: false,
+        uploadedBy: current.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      if (input.checksumSha256) payload.checksumSha256 = input.checksumSha256.trim().slice(0, 128);
+      if (input.linkedMaterialId) payload.linkedMaterialId = sanitizeId(input.linkedMaterialId);
+      await setDoc(doc(db, 'storageMetadata', fileId), payload);
+      await writeAuditLog({
+        action: 'register_storage_file',
+        targetCollection: 'storageMetadata',
+        targetId: fileId,
+        summary: `Arquivo registrado (${input.storageProvider}): ${input.fileName.trim().slice(0, 90)}`,
+      });
+      return fileId;
+    } catch (err) {
+      setSyncError('Erro ao registrar metadados do arquivo.');
+      handleFirestoreError(err, OperationType.CREATE, path);
+      return fileId;
+    }
+  };
+
+  const updateStorageMetadataRecord = async (
+    fileId: string,
+    patch: Partial<Pick<StorageMetadataRecord, 'linkedMaterialId' | 'campusLevel' | 'archived' | 'version'>>
+  ) => {
+    if (!canAccessTeacherPanel) throw new Error('Acesso restrito.');
+    const safeId = sanitizeId(fileId);
+    const path = `storageMetadata/${safeId}`;
+    try {
+      const updates: Record<string, unknown> = { updatedAt: serverTimestamp() };
+      if (patch.linkedMaterialId !== undefined) updates.linkedMaterialId = patch.linkedMaterialId.slice(0, 128);
+      if (patch.campusLevel !== undefined) updates.campusLevel = patch.campusLevel;
+      if (patch.archived !== undefined) updates.archived = Boolean(patch.archived);
+      if (patch.version !== undefined) updates.version = Math.max(1, Math.min(1000, Math.round(patch.version)));
+      await updateDoc(doc(db, 'storageMetadata', safeId), updates);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const deleteStorageMetadataRecord = async (fileId: string) => {
+    if (!canManageUsers) throw new Error('Apenas Administrador Principal pode remover registros de armazenamento.');
+    const safeId = sanitizeId(fileId);
+    try {
+      await deleteDoc(doc(db, 'storageMetadata', safeId));
+      await writeAuditLog({
+        action: 'delete_storage_metadata',
+        targetCollection: 'storageMetadata',
+        targetId: safeId,
+        summary: `Registro de armazenamento removido: ${safeId}`,
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `storageMetadata/${safeId}`);
+    }
+  };
+
   const inviteFamilyMember = async (input: {
     name: string;
     email: string;
@@ -2608,12 +3914,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         effectiveRole,
         isAdmin,
         isEditor,
+        isTeacher,
         isDev,
         canAccessAdminPanel,
+        canAccessTeacherPanel,
         canManageUsers,
         canPublishShared,
         activeWorkspaceMode: activeWorkspaceModeState,
         setActiveWorkspaceMode,
+        preferences,
+        updateStudentPreferences,
+        toggleFavoriteMaterial,
+        toggleFavoriteQuestion,
+        toggleFavoriteTopic,
         getIdToken,
         myFamilyMembership,
         familyMembers,
@@ -2642,6 +3955,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         allManagedSimuladoLists,
         platformNotices,
         allManagedNotices,
+        exams,
+        allManagedExams,
+        classes,
+        allManagedClasses,
+        enrollments,
+        lessons,
+        allManagedLessons,
+        activities,
+        allManagedActivities,
+        submissions,
+        storageMetadataRecords,
+        auditLogs,
         getCampusDisciplines,
         loginWithEmail,
         registerWithEmail,
@@ -2653,6 +3978,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         updateProfileSettings,
         updateUserRole,
+        toggleUserActive,
+        updateUserAssignments,
         saveDisciplineWeeklyGoal,
         saveTopicProgress,
         saveReadingProgress,
@@ -2678,6 +4005,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateSimuladoListStatus,
         savePlatformNotice,
         updatePlatformNoticeStatus,
+        saveExamConcurso,
+        updateExamStatus,
+        saveClassroom,
+        updateClassroomStatus,
+        enrollStudentInClass,
+        updateEnrollmentStatus,
+        removeEnrollment,
+        saveLesson,
+        updateLessonStatus,
+        deleteLesson,
+        saveActivity,
+        updateActivityStatus,
+        deleteActivity,
+        submitActivity,
+        gradeSubmission,
+        registerStorageMetadata,
+        updateStorageMetadataRecord,
+        deleteStorageMetadataRecord,
+        writeAuditLog,
       }}
     >
       {children}

@@ -307,10 +307,10 @@ export function FamilyAccessView({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-medium text-emerald-800">
+          <p className="text-xs font-medium text-emerald-800 dark:text-emerald-400">
             Área Compartilhada · Login de Familiares, Publicação de Ensino e Acessos
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 mt-0.5">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-0.5">
             Acesso por Familiares & Monitoramento
           </h1>
         </div>
@@ -319,9 +319,9 @@ export function FamilyAccessView({
           <button
             type="button"
             onClick={() => onOpenContent('geral')}
-            className="min-h-[42px] px-3.5 py-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
+            className="min-h-[42px] px-3.5 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
           >
-            <FolderOpen className="w-4 h-4 text-[#146C43]" />
+            <FolderOpen className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
             <span>Abrir Aba Geral</span>
           </button>
           <button
@@ -337,10 +337,10 @@ export function FamilyAccessView({
 
       {/* Aviso se entrou como visitante sem nuvem */}
       {isGuest && !user && (
-        <section className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <section className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
-            <p className="text-sm font-bold text-amber-950">Você está no Modo Visitante (sem nuvem)</p>
-            <p className="text-xs text-amber-900">
+            <p className="text-sm font-bold text-amber-950 dark:text-amber-200">Você está no Modo Visitante (sem nuvem)</p>
+            <p className="text-xs text-amber-900 dark:text-amber-300">
               Para acessar conteúdos enviados por familiares em tempo real, publicar aulas compartilhadas e contabilizar
               seu acesso na rede da família, entre com Google ou com sua conta familiar.
             </p>
@@ -356,11 +356,11 @@ export function FamilyAccessView({
       )}
 
       {/* 1. QUANTAS PESSOAS ESTÃO ACESSANDO (LIVE PRESENCE COUNTER) */}
-      <section className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <p className="text-[11px] font-semibold text-[#146C43]">Monitoramento em Tempo Real</p>
-            <h2 className="font-display text-lg font-bold text-slate-900">
+            <p className="text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">Monitoramento em Tempo Real</p>
+            <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
               Quantas pessoas estão acessando
             </h2>
           </div>
@@ -368,10 +368,10 @@ export function FamilyAccessView({
           <span
             className={`px-3 py-1 rounded-lg text-xs font-semibold w-fit ${
               isAdmin
-                ? 'bg-emerald-50 text-[#0B3321] border border-emerald-200'
+                ? 'bg-emerald-50 dark:bg-emerald-950/50 text-[#0B3321] dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                 : myFamilyMembership?.active
-                  ? 'bg-emerald-50 text-[#0B3321] border border-emerald-200'
-                  : 'bg-slate-100 text-slate-700'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/50 text-[#0B3321] dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
             }`}
           >
             {isAdmin
@@ -398,40 +398,40 @@ export function FamilyAccessView({
                 </p>
               </div>
 
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                <p className="text-xs text-slate-600">Acessaram hoje</p>
-                <p className="font-mono text-2xl sm:text-3xl font-bold text-slate-900 tabular-nums">
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1">
+                <p className="text-xs text-slate-600 dark:text-slate-400">Acessaram hoje</p>
+                <p className="font-mono text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 tabular-nums">
                   {accessMetrics.todayPeopleCount}
                 </p>
-                <p className="text-[11px] text-slate-500">Pessoas distintas hoje</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Pessoas distintas hoje</p>
               </div>
 
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                <p className="text-xs text-slate-600">Total já conectado</p>
-                <p className="font-mono text-2xl sm:text-3xl font-bold text-slate-900 tabular-nums">
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1">
+                <p className="text-xs text-slate-600 dark:text-slate-400">Total já conectado</p>
+                <p className="font-mono text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 tabular-nums">
                   {accessMetrics.totalUniqueUsers}
                 </p>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
                   {accessMetrics.totalSessionsCount} {accessMetrics.totalSessionsCount === 1 ? 'dispositivo' : 'dispositivos'}
                 </p>
               </div>
 
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                <p className="text-xs text-slate-600">Conteúdos da família</p>
-                <p className="font-mono text-2xl sm:text-3xl font-bold text-[#0B3321] tabular-nums">
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1">
+                <p className="text-xs text-slate-600 dark:text-slate-400">Conteúdos da família</p>
+                <p className="font-mono text-2xl sm:text-3xl font-bold text-[#0B3321] dark:text-emerald-400 tabular-nums">
                   {familySharedMaterials.length}
                 </p>
-                <p className="text-[11px] text-slate-500">Publicados na nuvem</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Publicados na nuvem</p>
               </div>
             </div>
 
             <div className="space-y-2.5 pt-1">
-              <p className="text-xs font-semibold text-slate-700">
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Pessoas e aparelhos recentes ({sortedSessions.length})
               </p>
 
               {sortedSessions.length === 0 ? (
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-400">
                   Nenhum acesso registrado ainda além desta sessão. Assim que um familiar entrar com o link abaixo, ele
                   aparecerá aqui automaticamente em tempo real.
                 </div>
@@ -444,14 +444,14 @@ export function FamilyAccessView({
                     return (
                       <div
                         key={sess.id}
-                        className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex items-center justify-between gap-3"
+                        className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 flex items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <div
                             className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                               status.activeNow
-                                ? 'bg-emerald-100 text-[#0B3321]'
-                                : 'bg-slate-200/80 text-slate-600'
+                                ? 'bg-emerald-100 dark:bg-emerald-950 text-[#0B3321] dark:text-emerald-300'
+                                : 'bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                             }`}
                           >
                             {sess.deviceType === 'mobile' ? (
@@ -461,11 +461,11 @@ export function FamilyAccessView({
                             )}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                            <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                               {sess.displayName}
                               {sess.userId === user?.uid ? ' (Você)' : ''}
                             </p>
-                            <p className="text-[11px] text-slate-600 truncate">
+                            <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">
                               {sess.deviceType === 'mobile' ? 'Celular' : 'Computador'} · Aba {tabName} ·{' '}
                               {sess.activeCampus === 'medio' ? 'Médio' : 'Superior'}
                             </p>
@@ -475,12 +475,12 @@ export function FamilyAccessView({
                         <div className="text-right shrink-0 space-y-0.5">
                           <p
                             className={`text-[11px] font-bold ${
-                              status.activeNow ? 'text-[#146C43]' : 'text-slate-500'
+                              status.activeNow ? 'text-[#146C43] dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'
                             }`}
                           >
                             {status.label}
                           </p>
-                          <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">
+                          <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                             {sess.accessType}
                           </p>
                         </div>
@@ -493,23 +493,23 @@ export function FamilyAccessView({
           </>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-1">
-              <p className="text-xs font-semibold text-[#0B3321]">Sua conexão familiar</p>
-              <p className="text-sm font-bold text-slate-900">
+            <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 space-y-1">
+              <p className="text-xs font-semibold text-[#0B3321] dark:text-emerald-300">Sua conexão familiar</p>
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 {user ? 'Conectado e contabilizado em tempo real' : 'Sem conta conectada'}
               </p>
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-slate-600 dark:text-slate-400">
                 {user
                   ? `${familySharedMaterials.length} conteúdos de ensino compartilhados disponíveis para você abrir.`
                   : 'Entre com Google ou E-mail na tela de login para receber atualizações da família.'}
               </p>
             </div>
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-              <p className="text-xs font-semibold text-slate-700">Permissão para publicar conteúdos</p>
-              <p className="text-sm font-bold text-slate-900">
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1">
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Permissão para publicar conteúdos</p>
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 {canPublishShared ? 'Liberada para compartilhar com a família' : 'Acesso de leitura + anotações pessoais'}
               </p>
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-slate-600 dark:text-slate-400">
                 {canPublishShared
                   ? 'Você pode incluir links de ensino abaixo e todos os familiares verão.'
                   : 'Você pode abrir tudo o que for publicado e salvar seus próprios links pessoais.'}
@@ -520,14 +520,16 @@ export function FamilyAccessView({
       </section>
 
       {/* 2. ABA PARA COLOCAR CONTEÚDOS DE ENSINO */}
-      <section className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-5">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <p className="text-[11px] font-semibold text-[#146C43]">Publicação Direta no Celular ou PC</p>
-            <h2 className="font-display text-lg font-bold text-slate-900">
+            <p className="text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">
+              Publicação Direta no Celular ou PC
+            </p>
+            <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
               Colocar Conteúdo de Ensino para Familiares
             </h2>
-            <p className="text-xs text-slate-600 mt-0.5">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
               Cole o link do Google Drive, PDF online, vídeo aula, apresentação ou planilha para disponibilizar na aba{' '}
               <strong>Geral</strong> ou <strong>Conteúdo</strong> de todos os familiares.
             </p>
@@ -537,7 +539,7 @@ export function FamilyAccessView({
         <form onSubmit={handlePublishTeachingContent} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Título do conteúdo de ensino
               </label>
               <input
@@ -546,12 +548,12 @@ export function FamilyAccessView({
                 value={matTitle}
                 onChange={(e) => setMatTitle(e.target.value)}
                 placeholder="Ex.: Apostila Direito Constitucional · Aula 01"
-                className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
+                className="w-full min-h-[42px] px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321] dark:focus:ring-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Link do material (Google Drive, PDF, Vídeo, Planilha)
               </label>
               <input
@@ -568,14 +570,16 @@ export function FamilyAccessView({
                   }
                 }}
                 placeholder="https://drive.google.com/... ou https://..."
-                className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
+                className="w-full min-h-[42px] px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321] dark:focus:ring-emerald-500"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Aba de destino</label>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Aba de destino
+              </label>
               <select
                 value={matScope}
                 onChange={(e) => {
@@ -589,7 +593,7 @@ export function FamilyAccessView({
                         : LIBRARY_CATEGORIES;
                   setMatCategoryId(list[0].id);
                 }}
-                className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white"
+                className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
               >
                 <option value="geral">Aba Geral (Comum aos 2 níveis)</option>
                 <option value="superior">Aba Conteúdo · Nível Superior</option>
@@ -598,11 +602,13 @@ export function FamilyAccessView({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Disciplina</label>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Disciplina
+              </label>
               <select
                 value={matCategoryId}
                 onChange={(e) => setMatCategoryId(e.target.value as LibraryCategoryId)}
-                className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white"
+                className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
               >
                 {scopeCategories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
@@ -613,11 +619,13 @@ export function FamilyAccessView({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Tipo de material</label>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Tipo de material
+              </label>
               <select
                 value={matResourceType}
                 onChange={(e) => setMatResourceType(e.target.value as ResourceType)}
-                className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white"
+                className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
               >
                 {RESOURCE_TYPE_META.map((rt) => (
                   <option key={rt.id} value={rt.id}>
@@ -629,19 +637,21 @@ export function FamilyAccessView({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Observação / instrução (opcional)</label>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Observação / instrução (opcional)
+            </label>
             <input
               type="text"
               value={matDescription}
               onChange={(e) => setMatDescription(e.target.value)}
               placeholder="Ex.: Ler páginas 1 a 25 antes do simulado"
-              className="w-full min-h-[40px] px-3 py-2 text-sm border border-slate-300 rounded-xl"
+              className="w-full min-h-[40px] px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 border border-slate-300 dark:border-slate-700 rounded-xl"
             />
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
             {canPublishShared ? (
-              <label className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-800 cursor-pointer">
+              <label className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={matShareWithFamily}
@@ -650,7 +660,7 @@ export function FamilyAccessView({
                 <span>Compartilhar com todos os familiares (visível nos celulares deles)</span>
               </label>
             ) : (
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-slate-600 dark:text-slate-400">
                 Salvo na sua biblioteca pessoal. Peça ao administrador para liberar publicação compartilhada no seu e-mail.
               </p>
             )}
@@ -667,29 +677,29 @@ export function FamilyAccessView({
         </form>
 
         {matFeedback && (
-          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-medium text-emerald-950">
+          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-medium text-emerald-950 dark:text-emerald-200">
             {matFeedback}
           </div>
         )}
 
         {/* Lista rápida de conteúdos publicados para a família */}
-        <div className="pt-3 border-t border-slate-100 space-y-2.5">
+        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-600">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400">
               Conteúdos compartilhados com familiares ({familySharedMaterials.length})
               {myPersonalMaterials.length > 0 && !isAdmin ? ` · Seus salvos (${myPersonalMaterials.length})` : ''}
             </h3>
             <button
               type="button"
               onClick={() => onNavigate('materials')}
-              className="text-xs font-semibold text-[#0B3321] hover:underline"
+              className="text-xs font-semibold text-[#0B3321] dark:text-emerald-400 hover:underline"
             >
               Ver todos na Aba Conteúdo
             </button>
           </div>
 
           {familySharedMaterials.length === 0 ? (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Nenhum conteúdo extra compartilhado ainda. Use o formulário acima para publicar PDFs, pastas do Drive ou
               videoaulas para seus familiares.
             </p>
@@ -700,11 +710,13 @@ export function FamilyAccessView({
                 return (
                   <div
                     key={mat.id}
-                    className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex items-center justify-between gap-3"
+                    className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 flex items-center justify-between gap-3"
                   >
                     <div className="min-w-0">
-                      <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">{mat.title}</p>
-                      <p className="text-[11px] text-slate-600 truncate">
+                      <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                        {mat.title}
+                      </p>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">
                         {getDisciplineShortName(mat.disciplineId)} · {mat.institution || 'Conteúdo Familiar'}
                       </p>
                     </div>
@@ -723,7 +735,7 @@ export function FamilyAccessView({
                           type="button"
                           onClick={() => void deleteMaterial(mat.id)}
                           aria-label="Excluir conteúdo"
-                          className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50"
+                          className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-slate-400 dark:text-slate-500 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -738,14 +750,16 @@ export function FamilyAccessView({
       </section>
 
       {/* 3. LINK DA ABA DE LOGIN PARA FAMILIARES + GERENCIAR FAMILIARES */}
-      <section className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-5">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold text-[#146C43]">Convite & Controle de Acesso</p>
-            <h2 className="font-display text-lg font-bold text-slate-900">
+            <p className="text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">
+              Convite & Controle de Acesso
+            </p>
+            <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
               Aba de Login de Acesso por Familiares
             </h2>
-            <p className="text-xs text-slate-600 mt-0.5">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
               Envie este link para seus familiares entrarem direto na aba <strong>Familiares</strong> no celular ou PC.
             </p>
           </div>
@@ -754,9 +768,13 @@ export function FamilyAccessView({
             <button
               type="button"
               onClick={() => void copyText(baseFamilyLoginUrl, 'general')}
-              className="min-h-[40px] px-3.5 py-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-900 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
+              className="min-h-[40px] px-3.5 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
             >
-              {copiedKey === 'general' ? <Check className="w-3.5 h-3.5 text-[#146C43]" /> : <Copy className="w-3.5 h-3.5" />}
+              {copiedKey === 'general' ? (
+                <Check className="w-3.5 h-3.5 text-[#146C43] dark:text-emerald-400" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
               <span>{copiedKey === 'general' ? 'Link copiado!' : 'Copiar link familiar'}</span>
             </button>
             <a
@@ -773,18 +791,18 @@ export function FamilyAccessView({
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 font-mono text-[11px] text-slate-700 break-all">
+        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-[11px] text-slate-700 dark:text-slate-300 break-all">
           {baseFamilyLoginUrl}
         </div>
 
         {/* Link Geral para Compartilhar pelo PC ou Celular */}
-        <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-2.5">
+        <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 space-y-2.5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <p className="text-xs font-bold text-[#0B3321]">
+              <p className="text-xs font-bold text-[#0B3321] dark:text-emerald-300">
                 Link Principal para Compartilhar pelo PC ou Celular
               </p>
-              <p className="text-[11px] text-slate-600">
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
                 Abre a plataforma completa para estudar, instalar no celular ou fazer login na nuvem.
               </p>
             </div>
@@ -792,7 +810,7 @@ export function FamilyAccessView({
               <button
                 type="button"
                 onClick={() => void copyText(publicAppUrl, 'public_app')}
-                className="min-h-[36px] px-3 py-1.5 bg-white border border-emerald-300 hover:bg-emerald-50 text-[#0B3321] text-xs font-semibold rounded-lg inline-flex items-center gap-1.5"
+                className="min-h-[36px] px-3 py-1.5 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-slate-700 text-[#0B3321] dark:text-emerald-300 text-xs font-semibold rounded-lg inline-flex items-center gap-1.5"
               >
                 {copiedKey === 'public_app' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copiedKey === 'public_app' ? 'Copiado!' : 'Copiar link geral'}</span>
@@ -810,50 +828,56 @@ export function FamilyAccessView({
               </a>
             </div>
           </div>
-          <div className="p-2.5 rounded-lg bg-white border border-emerald-200 font-mono text-[11px] text-slate-800 break-all">
+          <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 font-mono text-[11px] text-slate-800 dark:text-slate-200 break-all">
             {publicAppUrl}
           </div>
         </div>
 
         {isAdmin && (
-          <div className="space-y-4 pt-2 border-t border-slate-100">
+          <div className="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800">
             <form onSubmit={handleAddFamilyMember} className="space-y-3">
               <div className="flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-[#0B3321]" />
-                <h3 className="text-sm font-bold text-slate-900">Autorizar Novo Familiar</h3>
+                <UserPlus className="w-4 h-4 text-[#0B3321] dark:text-emerald-400" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Autorizar Novo Familiar</h3>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Nome do familiar</label>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Nome do familiar
+                  </label>
                   <input
                     type="text"
                     required
                     value={famName}
                     onChange={(e) => setFamName(e.target.value)}
                     placeholder="Ex.: Maria Silva"
-                    className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                    className="w-full min-h-[42px] px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 border border-slate-300 dark:border-slate-700 rounded-xl"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">E-mail de acesso (Google ou Login)</label>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    E-mail de acesso (Google ou Login)
+                  </label>
                   <input
                     type="email"
                     required
                     value={famEmail}
                     onChange={(e) => setFamEmail(e.target.value)}
                     placeholder="familiar@gmail.com"
-                    className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                    className="w-full min-h-[42px] px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 border border-slate-300 dark:border-slate-700 rounded-xl"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Parentesco</label>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Parentesco
+                  </label>
                   <select
                     value={famRelation}
                     onChange={(e) => setFamRelation(e.target.value)}
-                    className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white"
+                    className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                   >
                     <option value="Familiar">Familiar</option>
                     <option value="Cônjuge">Cônjuge</option>
@@ -866,7 +890,7 @@ export function FamilyAccessView({
               </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <label className="flex items-center gap-2 text-xs sm:text-sm text-slate-700 cursor-pointer">
+                <label className="flex items-center gap-2 text-xs sm:text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={famCanPublish}
@@ -887,18 +911,18 @@ export function FamilyAccessView({
             </form>
 
             {famFeedback && (
-              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-medium text-emerald-950">
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-medium text-emerald-950 dark:text-emerald-200">
                 {famFeedback}
               </div>
             )}
 
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-slate-700">
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Familiares autorizados ({familyMembers.length})
               </p>
 
               {familyMembers.length === 0 ? (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Nenhum familiar cadastrado ainda. Adicione acima o e-mail de quem vai acessar ou colaborar com conteúdos.
                 </p>
               ) : (
@@ -908,17 +932,19 @@ export function FamilyAccessView({
                     return (
                       <div
                         key={member.id}
-                        className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                        className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                       >
                         <div className="flex items-start gap-2.5 min-w-0">
-                          <Users className="w-4 h-4 text-[#0B3321] shrink-0 mt-0.5" />
+                          <Users className="w-4 h-4 text-[#0B3321] dark:text-emerald-400 shrink-0 mt-0.5" />
                           <div className="min-w-0">
-                            <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                            <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                               {member.name}{' '}
-                              <span className="font-normal text-slate-500">· {member.relationship}</span>
+                              <span className="font-normal text-slate-500 dark:text-slate-400">
+                                · {member.relationship}
+                              </span>
                             </p>
-                            <p className="text-xs text-slate-600 truncate">{member.email}</p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">
+                            <p className="text-xs text-slate-600 dark:text-slate-400 truncate">{member.email}</p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                               {member.active ? 'Acesso ativo' : 'Acesso pausado'} ·{' '}
                               {member.canPublish ? 'Pode publicar conteúdos' : 'Somente leitura'}
                             </p>
@@ -929,10 +955,10 @@ export function FamilyAccessView({
                           <button
                             type="button"
                             onClick={() => void copyText(memberInviteLink, member.id)}
-                            className="min-h-[34px] px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-[11px] font-semibold rounded-lg inline-flex items-center gap-1 whitespace-nowrap"
+                            className="min-h-[34px] px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-[11px] font-semibold rounded-lg inline-flex items-center gap-1 whitespace-nowrap"
                           >
                             {copiedKey === member.id ? (
-                              <Check className="w-3 h-3 text-[#146C43]" />
+                              <Check className="w-3 h-3 text-[#146C43] dark:text-emerald-400" />
                             ) : (
                               <Copy className="w-3 h-3" />
                             )}
@@ -943,8 +969,8 @@ export function FamilyAccessView({
                             onClick={() => void toggleFamilyMemberPublish(member.id, !member.canPublish)}
                             className={`min-h-[34px] px-2.5 py-1 border text-[11px] font-semibold rounded-lg whitespace-nowrap ${
                               member.canPublish
-                                ? 'bg-emerald-50 border-emerald-200 text-[#0B3321]'
-                                : 'bg-white border-slate-200 text-slate-700'
+                                ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-[#0B3321] dark:text-emerald-300'
+                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                             }`}
                           >
                             {member.canPublish ? 'Publica: Sim' : 'Publica: Não'}
@@ -952,7 +978,7 @@ export function FamilyAccessView({
                           <button
                             type="button"
                             onClick={() => void toggleFamilyMemberActive(member.id, !member.active)}
-                            className="min-h-[34px] px-2.5 py-1 bg-white border border-slate-200 text-slate-700 text-[11px] font-medium rounded-lg whitespace-nowrap"
+                            className="min-h-[34px] px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-medium rounded-lg whitespace-nowrap"
                           >
                             {member.active ? 'Pausar' : 'Ativar'}
                           </button>
@@ -960,7 +986,7 @@ export function FamilyAccessView({
                             type="button"
                             onClick={() => void removeFamilyMember(member.id)}
                             aria-label="Remover familiar"
-                            className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50"
+                            className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-slate-400 dark:text-slate-500 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

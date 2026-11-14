@@ -38,8 +38,9 @@ import {
   getDaysUntilExam,
 } from '../data/alepaSyllabus';
 import { StudyAlertSettings } from '../hooks/useStudyAlert';
-import { CampusLevel, LibraryScope, MedioCargoGroup, NavSection, formatRoleLabel } from '../types';
+import { CampusLevel, LibraryScope, MedioCargoGroup, NavSection, StudyMaterial, formatRoleLabel } from '../types';
 import { loadLastStudiedContext } from '../utils/mediaUrls';
+import { BookReaderModal } from './BookReaderModal';
 
 interface DashboardViewProps {
   campus: CampusLevel;
@@ -90,9 +91,11 @@ export function DashboardView({
     profile,
     effectiveRole,
     isAdmin,
+    preferences,
     accessSessions,
     topicProgressMap,
     disciplineGoalsMap,
+    readingProgressMap,
     saveDisciplineWeeklyGoal,
     studySessions,
     simuladoAttempts,
@@ -100,8 +103,38 @@ export function DashboardView({
     materials,
     questions,
     platformNotices,
+    classes,
+    lessons,
+    activities,
     getCampusDisciplines,
   } = useAuth();
+
+  const [readerMaterial, setReaderMaterial] = useState<StudyMaterial | null>(null);
+
+  const hiddenCardsSet = React.useMemo(
+    () => new Set(preferences.hiddenDashboardCards || []),
+    [preferences.hiddenDashboardCards]
+  );
+  const isCardVisible = (cardId: string) => !hiddenCardsSet.has(cardId);
+  const getCardOrderStyle = (cardId: string): React.CSSProperties | undefined => {
+    const idx = preferences.dashboardCardOrder.indexOf(cardId);
+    return idx >= 0 ? { order: idx } : undefined;
+  };
+
+  const latestReading = React.useMemo(() => {
+    const entries = Object.values(readingProgressMap);
+    if (entries.length === 0) return null;
+    const sorted = [...entries].sort((a, b) => {
+      const ta = a.lastReadAt ? new Date(a.lastReadAt).getTime() : 0;
+      const tb = b.lastReadAt ? new Date(b.lastReadAt).getTime() : 0;
+      return tb - ta;
+    });
+    for (const rp of sorted) {
+      const mat = materials.find((m) => m.id === rp.materialId);
+      if (mat) return { progress: rp, material: mat };
+    }
+    return null;
+  }, [readingProgressMap, materials]);
 
   const onlineNowCount = React.useMemo(() => {
     const now = Date.now();
@@ -446,15 +479,15 @@ export function DashboardView({
   ];
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Compact Header & Segmented Campus Switcher (Clean on Mobile, Rich on Desktop) */}
-      <section className="space-y-3">
+    <div className="flex flex-col gap-4 sm:gap-6">
+      {/* Compact Header & Segmented Campus Switcher */}
+      <section className="space-y-3" style={{ order: -2 }}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] sm:text-xs font-semibold text-[#146C43]">
+            <p className="text-[11px] sm:text-xs font-semibold text-[#146C43] dark:text-emerald-400">
               Meu Campus ALEPA · Fundação CETAP
             </p>
-            <h1 className="font-display text-lg sm:text-2xl font-bold text-slate-900 truncate">
+            <h1 className="font-display text-lg sm:text-2xl font-bold text-slate-900 dark:text-slate-100 truncate">
               {isMedio ? `Nível Médio · ${activeMedioCargo.code}` : 'Nível Superior · PL.AL.102'}
             </h1>
           </div>
@@ -462,7 +495,7 @@ export function DashboardView({
             href={MEDIO_CONCURSO_PROFILE.editalUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="min-h-[36px] px-2.5 py-1 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-[#0B3321] hover:border-[#0B3321] inline-flex items-center gap-1 whitespace-nowrap shrink-0"
+            className="min-h-[36px] px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-[#0B3321] dark:text-emerald-300 hover:border-[#0B3321] inline-flex items-center gap-1 whitespace-nowrap shrink-0"
           >
             <span>CETAP</span>
             <ExternalLink className="w-3 h-3" />
@@ -470,22 +503,26 @@ export function DashboardView({
         </div>
 
         {/* Segmented Campus Switcher */}
-        <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-200/75 rounded-2xl">
+        <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-200/75 dark:bg-slate-800 rounded-2xl">
           <button
             type="button"
             onClick={() => onChangeCampus('superior')}
             className={`min-h-[48px] px-3 py-2 rounded-xl text-left transition-all flex items-center gap-2.5 ${
               campus === 'superior'
                 ? 'bg-[#0B3321] text-white shadow-xs'
-                : 'text-slate-700 hover:bg-white/60'
+                : 'text-slate-700 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
             }`}
           >
             <GraduationCap
-              className={`w-5 h-5 shrink-0 ${campus === 'superior' ? 'text-emerald-300' : 'text-[#146C43]'}`}
+              className={`w-5 h-5 shrink-0 ${campus === 'superior' ? 'text-emerald-300' : 'text-[#146C43] dark:text-emerald-400'}`}
             />
             <div className="min-w-0">
               <p className="text-xs sm:text-sm font-bold truncate">Nível Superior</p>
-              <p className={`text-[10px] sm:text-xs font-mono truncate ${campus === 'superior' ? 'text-emerald-200' : 'text-slate-500'}`}>
+              <p
+                className={`text-[10px] sm:text-xs font-mono truncate ${
+                  campus === 'superior' ? 'text-emerald-200' : 'text-slate-500 dark:text-slate-400'
+                }`}
+              >
                 Cargo 03 · PL.AL.102
               </p>
             </div>
@@ -500,22 +537,26 @@ export function DashboardView({
             className={`min-h-[48px] px-3 py-2 rounded-xl text-left transition-all flex items-center gap-2.5 ${
               campus === 'medio'
                 ? 'bg-[#0B3321] text-white shadow-xs'
-                : 'text-slate-700 hover:bg-white/60'
+                : 'text-slate-700 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
             }`}
           >
             <Layers
-              className={`w-5 h-5 shrink-0 ${campus === 'medio' ? 'text-emerald-300' : 'text-[#146C43]'}`}
+              className={`w-5 h-5 shrink-0 ${campus === 'medio' ? 'text-emerald-300' : 'text-[#146C43] dark:text-emerald-400'}`}
             />
             <div className="min-w-0">
               <p className="text-xs sm:text-sm font-bold truncate">Nível Médio</p>
-              <p className={`text-[10px] sm:text-xs font-mono truncate ${campus === 'medio' ? 'text-emerald-200' : 'text-slate-500'}`}>
+              <p
+                className={`text-[10px] sm:text-xs font-mono truncate ${
+                  campus === 'medio' ? 'text-emerald-200' : 'text-slate-500 dark:text-slate-400'
+                }`}
+              >
                 Cargo 04 · PL.AL.060
               </p>
             </div>
           </button>
         </div>
 
-        {/* Sub-selector de cargos Nível Médio (horizontal snap no celular, grid no desktop) */}
+        {/* Sub-selector de cargos Nível Médio */}
         {isMedio && (
           <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-2 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-0.5">
             {MEDIO_CARGOS.map((cargo) => {
@@ -527,11 +568,11 @@ export function DashboardView({
                   onClick={() => onChangeMedioCargoGroup(cargo.group)}
                   className={`snap-start min-w-[205px] sm:min-w-0 shrink-0 text-left p-2.5 sm:p-3 rounded-xl border text-xs transition-colors ${
                     selected
-                      ? 'border-[#146C43] bg-emerald-50 text-slate-900'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      ? 'border-[#146C43] bg-emerald-50 dark:bg-emerald-950/60 text-slate-900 dark:text-slate-100'
+                      : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-300'
                   }`}
                 >
-                  <p className="font-mono font-bold text-[#0B3321]">
+                  <p className="font-mono font-bold text-[#0B3321] dark:text-emerald-300">
                     {cargo.cargoNumber} · {cargo.code}
                   </p>
                   <p className="font-semibold truncate mt-0.5">{cargo.shortTitle.replace(/^Cargo \d+ · /, '')}</p>
@@ -543,7 +584,8 @@ export function DashboardView({
       </section>
 
       {/* Active Campus Deep Forest Green Hero Card with Instant Action */}
-      <section className="bg-[#0B3321] text-white rounded-2xl p-4 sm:p-7 space-y-4">
+      {isCardVisible('hero') && (
+      <section className="bg-[#0B3321] text-white rounded-2xl p-4 sm:p-7 space-y-4" style={getCardOrderStyle('hero')}>
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1 min-w-0">
             <p className="text-[11px] sm:text-xs font-medium text-emerald-300">
@@ -626,25 +668,26 @@ export function DashboardView({
           </div>
         </div>
       </section>
+      )}
 
       {/* Compact Real-Data KPI Row (2x2 on phone, 4 cols on tablet/desktop) */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
-        <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4">
-          <p className="text-[11px] font-medium text-slate-500">Progresso do edital</p>
-          <p className="font-display text-xl sm:text-2xl font-bold font-mono tabular-nums text-[#0B3321] mt-0.5">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3" style={{ order: -1 }}>
+        <div className="campus-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4">
+          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Progresso do edital</p>
+          <p className="font-display text-xl sm:text-2xl font-bold font-mono tabular-nums text-[#0B3321] dark:text-emerald-300 mt-0.5">
             {syllabusPct}%
           </p>
-          <p className="text-[11px] text-slate-600 truncate mt-0.5">
+          <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate mt-0.5">
             {completedTopics}/{totalTopics} tópicos concluídos
           </p>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4">
-          <p className="text-[11px] font-medium text-slate-500">Tempo & Meta hoje</p>
-          <p className="font-display text-xl sm:text-2xl font-bold font-mono tabular-nums text-slate-900 mt-0.5">
-            {minutesToday}m <span className="text-sm font-normal text-slate-500">/ {dailyGoal}m</span>
+        <div className="campus-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4">
+          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Tempo & Meta hoje</p>
+          <p className="font-display text-xl sm:text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-0.5">
+            {minutesToday}m <span className="text-sm font-normal text-slate-500 dark:text-slate-400">/ {dailyGoal}m</span>
           </p>
-          <p className="text-[11px] text-slate-600 truncate mt-0.5">
+          <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate mt-0.5">
             {(totalLoggedMinutesCampus / 60).toFixed(1)}h acumuladas no campus
           </p>
         </div>
@@ -652,13 +695,13 @@ export function DashboardView({
         <button
           type="button"
           onClick={() => onNavigate('simulados')}
-          className="text-left bg-white border border-slate-200 hover:border-[#0B3321] rounded-2xl p-3.5 sm:p-4 transition-colors"
+          className="campus-card text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-[#0B3321] rounded-2xl p-3.5 sm:p-4 transition-colors"
         >
-          <p className="text-[11px] font-medium text-slate-500">Questões & Taxa</p>
-          <p className="font-display text-xl sm:text-2xl font-bold font-mono tabular-nums text-[#146C43] mt-0.5">
+          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Questões & Taxa</p>
+          <p className="font-display text-xl sm:text-2xl font-bold font-mono tabular-nums text-[#146C43] dark:text-emerald-400 mt-0.5">
             {accuracyPct !== null ? `${accuracyPct}%` : `${campusQuestionCount} q.`}
           </p>
-          <p className="text-[11px] text-slate-600 truncate mt-0.5">
+          <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate mt-0.5">
             {accuracyPct !== null
               ? `${totalCorrectSimulados}/${totalAnsweredSimulados} acertos em simulados`
               : 'Banco CETAP disponível'}
@@ -668,34 +711,104 @@ export function DashboardView({
         <button
           type="button"
           onClick={() => onNavigate('revisions')}
-          className="text-left bg-white border border-slate-200 hover:border-[#0B3321] rounded-2xl p-3.5 sm:p-4 transition-colors"
+          className="campus-card text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-[#0B3321] rounded-2xl p-3.5 sm:p-4 transition-colors"
         >
-          <p className="text-[11px] font-medium text-slate-500">Revisões agendadas</p>
+          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Revisões agendadas</p>
           <p
             className={`font-display text-xl sm:text-2xl font-bold font-mono tabular-nums mt-0.5 ${
-              overdueReviews > 0 ? 'text-amber-700' : 'text-slate-900'
+              overdueReviews > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100'
             }`}
           >
             {overdueReviews} <span className="text-xs font-sans font-semibold">hoje</span>
           </p>
-          <p className="text-[11px] text-slate-600 truncate mt-0.5">
+          <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate mt-0.5">
             {pendingErrors} pendentes no Caderno
           </p>
         </button>
       </section>
 
+      {/* Continuar leitura no Book Reader (PDF) */}
+      {isCardVisible('continue_reading') && latestReading && (
+        <section
+          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+          style={getCardOrderStyle('continue_reading')}
+        >
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-300 flex items-center justify-center shrink-0">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold text-[#146C43] dark:text-emerald-400 uppercase tracking-wider">
+                Continuar leitura · Book Reader
+              </p>
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                {latestReading.material.title}
+              </p>
+              <p className="text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400 mt-0.5">
+                Página {latestReading.progress.lastPage} de {latestReading.progress.totalPages || '?'} ·{' '}
+                {latestReading.progress.progressPercent}% · {latestReading.progress.bookmarks.length} marcadores ·{' '}
+                {latestReading.progress.annotations.length} notas
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReaderMaterial(latestReading.material)}
+            className="min-h-[42px] px-4 py-2 bg-[#0B3321] hover:bg-[#146C43] text-white text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>Abrir página {latestReading.progress.lastPage}</span>
+          </button>
+        </section>
+      )}
+
+      {/* Turmas, Aulas & Atividades do Estudante */}
+      {isCardVisible('classroom_feed') && (
+        <section
+          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+          style={getCardOrderStyle('classroom_feed')}
+        >
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-300 flex items-center justify-center shrink-0">
+              <GraduationCap className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold text-[#146C43] dark:text-emerald-400 uppercase tracking-wider">
+                Minhas Turmas & Aulas
+              </p>
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                {classes.filter((c) => c.campusLevel === campus).length} turmas ativas ·{' '}
+                {lessons.filter((l) => l.campusLevel === campus).length} aulas ·{' '}
+                {activities.filter((a) => a.campusLevel === campus).length} atividades
+              </p>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                Acesse roteiros docentes, responda questões avaliativas e acompanhe correções.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('classroom')}
+            className="min-h-[42px] px-4 py-2 bg-[#0B3321] hover:bg-[#146C43] text-white text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+          >
+            <GraduationCap className="w-4 h-4" />
+            <span>Acessar turmas</span>
+          </button>
+        </section>
+      )}
+
       {/* Avisos Publicados pela Coordenação */}
-      {activeNotices.length > 0 && (
-        <section className="space-y-2.5" aria-label="Avisos publicados">
+      {isCardVisible('notices') && activeNotices.length > 0 && (
+        <section className="space-y-2.5" aria-label="Avisos publicados" style={getCardOrderStyle('notices')}>
           {activeNotices.map((notice) => (
             <div
               key={notice.id}
               className={`rounded-2xl border p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
                 notice.priority === 'urgente'
-                  ? 'bg-amber-50 border-amber-300 text-amber-950'
+                  ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-950 dark:text-amber-200'
                   : notice.priority === 'importante'
-                    ? 'bg-[#E8F3EC] border-emerald-300 text-[#0B3321]'
-                    : 'bg-white border-slate-200 text-slate-800'
+                    ? 'bg-[#E8F3EC] dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-[#0B3321] dark:text-emerald-200'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200'
               }`}
             >
               <div className="min-w-0 space-y-0.5">
@@ -720,7 +833,7 @@ export function DashboardView({
               <button
                 type="button"
                 onClick={() => onNavigate('schedule')}
-                className="min-h-[38px] px-3 py-1.5 rounded-xl bg-white/80 hover:bg-white border border-black/10 text-xs font-semibold shrink-0 self-start sm:self-center"
+                className="min-h-[38px] px-3 py-1.5 rounded-xl bg-white/80 dark:bg-slate-900/80 hover:bg-white border border-black/10 dark:border-white/10 text-xs font-semibold shrink-0 self-start sm:self-center"
               >
                 Ver cronograma
               </button>
@@ -731,16 +844,16 @@ export function DashboardView({
 
       {/* Continuar de onde parei (when user has recent study context) */}
       {lastStudied && (
-        <section className="bg-[#E8F3EC] border border-emerald-200 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <section className="bg-[#E8F3EC] dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-[#0B3321] text-white flex items-center justify-center shrink-0">
               <CheckCircle2 className="w-5 h-5 text-emerald-300" />
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] font-bold text-[#146C43] uppercase tracking-wider">
+              <p className="text-[11px] font-bold text-[#146C43] dark:text-emerald-400 uppercase tracking-wider">
                 Continuar de onde parei
               </p>
-              <p className="text-sm font-bold text-slate-900 truncate">{lastStudied.label}</p>
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{lastStudied.label}</p>
             </div>
           </div>
           <button
@@ -760,8 +873,8 @@ export function DashboardView({
         </section>
       )}
 
-      {/* Mobile Interactive Section Switcher (prevents vertical wall of cards on phone) */}
-      <div className="md:hidden grid grid-cols-3 gap-1 p-1 bg-slate-200/80 rounded-2xl">
+      {/* Mobile Interactive Section Switcher */}
+      <div className="md:hidden grid grid-cols-3 gap-1 p-1 bg-slate-200/80 dark:bg-slate-800 rounded-2xl">
         {(
           [
             { id: 'today', label: 'Hoje & Acesso' },
@@ -776,7 +889,9 @@ export function DashboardView({
               type="button"
               onClick={() => setMobileSection(tab.id)}
               className={`min-h-[42px] px-2 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-                active ? 'bg-white text-[#0B3321] shadow-xs' : 'text-slate-600'
+                active
+                  ? 'bg-white dark:bg-slate-900 text-[#0B3321] dark:text-emerald-300 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400'
               }`}
             >
               {tab.label}
@@ -785,20 +900,23 @@ export function DashboardView({
         })}
       </div>
 
-      {/* SECTION 1: Hoje & Acesso Rápido (Always on Desktop, Tab 'today' on Mobile) */}
-      <div className={`${mobileSection === 'today' ? 'block' : 'hidden'} md:block space-y-5`}>
-        {/* Estudo de Hoje (Horizontal Snap on Mobile, Grid on Desktop) */}
-        <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-3.5">
+      {/* SECTION 1: Hoje & Acesso Rápido */}
+      <div
+        className={`${mobileSection === 'today' ? 'block' : 'hidden'} md:block space-y-5`}
+        style={getCardOrderStyle('study_today')}
+      >
+        {isCardVisible('study_today') && (
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 space-y-3.5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold text-[#146C43]">
+              <p className="text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">
                 Plano de hoje · 4 blocos (2h)
               </p>
-              <h3 className="font-display text-base sm:text-lg font-bold text-slate-900">
+              <h3 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
                 Toque em um bloco para iniciar o timer
               </h3>
             </div>
-            <span className="font-mono text-xs font-semibold text-[#0B3321] tabular-nums shrink-0">
+            <span className="font-mono text-xs font-semibold text-[#0B3321] dark:text-emerald-300 tabular-nums shrink-0">
               {minutesToday}/{dailyGoal}m
             </span>
           </div>
@@ -809,21 +927,27 @@ export function DashboardView({
                 key={block.order}
                 type="button"
                 onClick={() => onStartFocusTimer(block.disciplineId, block.topicTitle)}
-                className="snap-start min-w-[185px] sm:min-w-0 shrink-0 text-left p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:border-[#0B3321] hover:bg-emerald-50/50 transition-all active:scale-[0.98]"
+                className="snap-start min-w-[185px] sm:min-w-0 shrink-0 text-left p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 hover:border-[#0B3321] hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 transition-all active:scale-[0.98]"
               >
-                <div className="flex items-center justify-between text-xs text-slate-500 font-mono tabular-nums">
-                  <span className="font-semibold text-[#146C43]">0{block.order}. {block.label.split(' ')[0]}</span>
+                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+                  <span className="font-semibold text-[#146C43] dark:text-emerald-400">
+                    0{block.order}. {block.label.split(' ')[0]}
+                  </span>
                   <span>{block.durationMinutes}m</span>
                 </div>
-                <p className="text-sm font-bold text-slate-900 truncate mt-1">{block.disciplineName}</p>
-                <p className="text-[11px] text-slate-500 truncate mt-0.5">{block.topicTitle}</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate mt-1">
+                  {block.disciplineName}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">{block.topicTitle}</p>
               </button>
             ))}
           </div>
         </section>
+        )}
 
         {/* Mobile Clean Interactive Action List (< md) */}
-        <section className="md:hidden bg-white border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100">
+        {isCardVisible('quick_actions') && (
+        <section className="md:hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
           {quickShortcuts.map((item) => {
             const Icon = item.icon;
             return (
@@ -831,27 +955,31 @@ export function DashboardView({
                 key={item.id}
                 type="button"
                 onClick={item.onClick}
-                className="w-full min-h-[60px] px-4 py-3 text-left flex items-center justify-between gap-3 hover:bg-slate-50 active:bg-slate-100 transition-colors"
+                className="w-full min-h-[60px] px-4 py-3 text-left flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800 active:bg-slate-100 transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#146C43] flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-[#146C43] dark:text-emerald-400 flex items-center justify-center shrink-0">
                     <Icon className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-900 truncate">{item.label}</p>
-                    <p className="text-xs text-slate-500 truncate">{item.subtitle}</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{item.label}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{item.subtitle}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="font-mono text-[11px] font-semibold text-[#0B3321]">{item.metric}</span>
+                  <span className="font-mono text-[11px] font-semibold text-[#0B3321] dark:text-emerald-300">
+                    {item.metric}
+                  </span>
                   <ChevronRight className="w-4 h-4 text-slate-400" />
                 </div>
               </button>
             );
           })}
         </section>
+        )}
 
-        {/* Desktop Rich Quick Bar + 2-Column Module Cards (hidden on mobile to keep phone super clean) */}
+        {/* Desktop Rich Quick Bar + 2-Column Module Cards */}
+        {isCardVisible('quick_actions') && (
         <div className="hidden md:block space-y-5">
           <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
             <button
@@ -927,57 +1055,64 @@ export function DashboardView({
                   key={card.id}
                   type="button"
                   onClick={() => onNavigate(card.id)}
-                  className="text-left bg-white border border-slate-200 hover:border-emerald-700/50 rounded-2xl p-5 transition-colors flex flex-col justify-between gap-3 min-h-[118px]"
+                  className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-700/50 rounded-2xl p-5 transition-colors flex flex-col justify-between gap-3 min-h-[118px]"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <Icon className="w-5 h-5 text-[#146C43]" />
-                    <span className="font-mono text-xs text-slate-500 tabular-nums">{card.metric}</span>
+                    <Icon className="w-5 h-5 text-[#146C43] dark:text-emerald-400" />
+                    <span className="font-mono text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                      {card.metric}
+                    </span>
                   </div>
                   <div>
-                    <h3 className="font-display text-lg font-bold text-slate-900">{card.title}</h3>
-                    <p className="text-sm text-slate-500 mt-0.5">{card.subtitle}</p>
+                    <h3 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">{card.title}</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{card.subtitle}</p>
                   </div>
                 </button>
               );
             })}
           </section>
         </div>
+        )}
 
         {/* Dica do Dia & Alerta de Estudos */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-2">
-            <div className="flex items-center gap-2 text-[#146C43]">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 space-y-2">
+            <div className="flex items-center gap-2 text-[#146C43] dark:text-emerald-400">
               <Lightbulb className="w-4 h-4" />
-              <h3 className="font-display text-base font-bold text-slate-900">Dica de estudo de hoje</h3>
+              <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+                Dica de estudo de hoje
+              </h3>
             </div>
-            <p className="text-sm text-slate-600 leading-relaxed">{todayPlan.studyTip}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{todayPlan.studyTip}</p>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 flex flex-col justify-between gap-3">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 flex flex-col justify-between gap-3">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-amber-700">
+                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
                   <Bell className="w-4 h-4" />
-                  <h3 className="font-display text-base font-bold text-slate-900">Alerta de estudos</h3>
+                  <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+                    Alerta de estudos
+                  </h3>
                 </div>
-                <span className="font-mono text-xs text-slate-500 tabular-nums">
+                <span className="font-mono text-xs text-slate-500 dark:text-slate-400 tabular-nums">
                   {alertSettings.enabled ? `Ativo · ${alertSettings.reminderTime}` : 'Desativado'}
                 </span>
               </div>
-              <p className="text-sm text-slate-600 leading-relaxed">{todayPlan.alertFocus}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{todayPlan.alertFocus}</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 onClick={() => onNavigate('schedule')}
-                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-50 text-xs font-semibold text-[#0B3321] hover:bg-emerald-100"
+                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-xs font-semibold text-[#0B3321] dark:text-emerald-300 hover:bg-emerald-100"
               >
                 Configurar alerta e cronograma
               </button>
               <button
                 type="button"
                 onClick={() => onNavigate('revisions')}
-                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-100 text-xs font-medium text-slate-700 hover:bg-slate-200"
+                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200"
               >
                 Caderno de Erros
               </button>
@@ -986,287 +1121,305 @@ export function DashboardView({
         </section>
       </div>
 
-      {/* SECTION 2: Gráfico de Progressão por Disciplina (Always on Desktop, Tab 'progress' on Mobile) */}
-      <section
-        className={`${mobileSection === 'progress' ? 'block' : 'hidden'} md:block bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5`}
-      >
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pb-4 border-b border-slate-100">
-          <div>
-            <p className="text-xs font-semibold text-[#146C43]">
-              Acompanhamento Independente ·{' '}
-              {isMedio
-                ? `Nível Médio · ${activeMedioCargo.cargoNumber} (${activeMedioCargo.code}) – ${activeDisciplines.length} Disciplinas`
-                : 'Nível Superior · Cargo 03 (PL.AL.102)'}
-            </p>
-            <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900 mt-0.5">
-              Gráfico de Progressão por Disciplina
-            </h2>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs text-slate-600 font-mono tabular-nums">
-            <span>
-              Domínio: <strong className="text-[#0B3321]">{overallMasteryPct}%</strong>
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>
-              Tópicos: <strong className="text-[#0B3321]">{completedTopics}/{totalTopics}</strong>
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>
-              Horas: <strong className="text-[#0B3321]">{(totalLoggedMinutesCampus / 60).toFixed(1)}h</strong>
-            </span>
-          </div>
-        </div>
-
-        {/* Quantidade de Questões por Bloco da Prova Objetiva (horizontal snap no celular) */}
-        <div className="flex sm:grid sm:grid-cols-5 gap-2.5 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-1">
-          {[
-            { label: 'Conhec. Específicos', q: '20 questões', pts: '4,0 pts · 1º desemp.' },
-            { label: 'Legislação e Ética', q: '10 questões', pts: '2,0 pts · 2º desemp.' },
-            { label: 'Língua Portuguesa', q: '10 questões', pts: '2,0 pts · 3º desemp.' },
-            { label: 'Raciocínio Lógico', q: '05 questões', pts: '1,0 pt · 4º desemp.' },
-            { label: 'Informática', q: '05 questões', pts: '1,0 pt · 5º desemp.' },
-          ].map((blk) => (
-            <div
-              key={blk.label}
-              className="snap-start min-w-[155px] sm:min-w-0 shrink-0 p-3 rounded-xl bg-slate-50 border border-slate-200/80"
-            >
-              <p className="text-[11px] font-medium text-slate-600 truncate">{blk.label}</p>
-              <p className="font-display text-sm font-bold text-[#0B3321] font-mono tabular-nums mt-0.5">{blk.q}</p>
-              <p className="text-[10px] font-mono text-slate-500 mt-0.5">{blk.pts}</p>
+      {/* SECTION 2: Gráfico de Progressão por Disciplina */}
+      {isCardVisible('disciplines_overview') && (
+        <section
+          className={`${mobileSection === 'progress' ? 'block' : 'hidden'} md:block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 space-y-5`}
+          style={getCardOrderStyle('disciplines_overview')}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <p className="text-xs font-semibold text-[#146C43] dark:text-emerald-400">
+                Acompanhamento Independente ·{' '}
+                {isMedio
+                  ? `Nível Médio · ${activeMedioCargo.cargoNumber} (${activeMedioCargo.code}) – ${activeDisciplines.length} Disciplinas`
+                  : 'Nível Superior · Cargo 03 (PL.AL.102)'}
+              </p>
+              <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                Gráfico de Progressão por Disciplina
+              </h2>
             </div>
-          ))}
-        </div>
 
-        <div className="space-y-3.5" role="region" aria-label="Gráfico de barras de progressão por disciplina">
-          {disciplineStats.map((stat) => (
-            <div key={stat.id} className="space-y-1.5">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() =>
-                    onOpenStudyRoom && stat.firstTopicId
-                      ? onOpenStudyRoom(stat.id, stat.firstTopicId)
-                      : onNavigate('disciplines')
-                  }
-                  className="font-semibold text-slate-900 hover:text-[#146C43] transition-colors text-left"
-                >
-                  <span className="font-mono text-slate-500 mr-1.5">{String(stat.rank).padStart(2, '0')}.</span>
-                  {stat.shortName}
-                </button>
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs text-slate-600 dark:text-slate-400 font-mono tabular-nums">
+              <span>
+                Domínio: <strong className="text-[#0B3321] dark:text-emerald-300">{overallMasteryPct}%</strong>
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>
+                Tópicos:{' '}
+                <strong className="text-[#0B3321] dark:text-emerald-300">
+                  {completedTopics}/{totalTopics}
+                </strong>
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>
+                Horas:{' '}
+                <strong className="text-[#0B3321] dark:text-emerald-300">
+                  {(totalLoggedMinutesCampus / 60).toFixed(1)}h
+                </strong>
+              </span>
+            </div>
+          </div>
 
-                <div className="flex items-center gap-2 sm:gap-3 font-mono text-slate-500 tabular-nums">
-                  <span className="text-[#0B3321] font-medium">{stat.examQuestions}q</span>
-                  <span aria-hidden="true">·</span>
-                  <span>{stat.completedTopics}/{stat.totalTopics}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>{stat.minutesLogged}m</span>
-                  <span className="font-bold text-[#0B3321] w-9 text-right">{stat.avgPct}%</span>
+          <div className="flex sm:grid sm:grid-cols-5 gap-2.5 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-1">
+            {[
+              { label: 'Conhec. Específicos', q: '20 questões', pts: '4,0 pts · 1º desemp.' },
+              { label: 'Legislação e Ética', q: '10 questões', pts: '2,0 pts · 2º desemp.' },
+              { label: 'Língua Portuguesa', q: '10 questões', pts: '2,0 pts · 3º desemp.' },
+              { label: 'Raciocínio Lógico', q: '05 questões', pts: '1,0 pt · 4º desemp.' },
+              { label: 'Informática', q: '05 questões', pts: '1,0 pt · 5º desemp.' },
+            ].map((blk) => (
+              <div
+                key={blk.label}
+                className="snap-start min-w-[155px] sm:min-w-0 shrink-0 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700"
+              >
+                <p className="text-[11px] font-medium text-slate-600 dark:text-slate-400 truncate">{blk.label}</p>
+                <p className="font-display text-sm font-bold text-[#0B3321] dark:text-emerald-300 font-mono tabular-nums mt-0.5">
+                  {blk.q}
+                </p>
+                <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">{blk.pts}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-3.5" role="region" aria-label="Gráfico de barras de progressão por disciplina">
+            {disciplineStats.map((stat) => (
+              <div key={stat.id} className="space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onOpenStudyRoom && stat.firstTopicId
+                        ? onOpenStudyRoom(stat.id, stat.firstTopicId)
+                        : onNavigate('disciplines')
+                    }
+                    className="font-semibold text-slate-900 dark:text-slate-100 hover:text-[#146C43] dark:hover:text-emerald-300 transition-colors text-left"
+                  >
+                    <span className="font-mono text-slate-500 dark:text-slate-400 mr-1.5">
+                      {String(stat.rank).padStart(2, '0')}.
+                    </span>
+                    {stat.shortName}
+                  </button>
+
+                  <div className="flex items-center gap-2 sm:gap-3 font-mono text-slate-500 dark:text-slate-400 tabular-nums">
+                    <span className="text-[#0B3321] dark:text-emerald-300 font-medium">{stat.examQuestions}q</span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      {stat.completedTopics}/{stat.totalTopics}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>{stat.minutesLogged}m</span>
+                    <span className="font-bold text-[#0B3321] dark:text-emerald-300 w-9 text-right">
+                      {stat.avgPct}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-300"
+                    style={{
+                      width: `${stat.avgPct > 0 ? Math.max(4, stat.avgPct) : 0}%`,
+                      backgroundColor: stat.avgPct >= 75 ? '#0B3321' : '#146C43',
+                    }}
+                  />
                 </div>
               </div>
+            ))}
+          </div>
 
-              <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{
-                    width: `${stat.avgPct > 0 ? Math.max(4, stat.avgPct) : 0}%`,
-                    backgroundColor: stat.avgPct >= 75 ? '#0B3321' : '#146C43',
-                  }}
-                />
+          <div className="pt-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+            <span>Teoria (40%), Questões (40%) e Revisão (20%) por tópico.</span>
+            <button
+              type="button"
+              onClick={() => onNavigate('disciplines')}
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-xs font-semibold text-[#0B3321] dark:text-emerald-300 hover:bg-emerald-100 whitespace-nowrap"
+            >
+              Atualizar checklist das disciplinas
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* SECTION 3: Metas Semanais por Disciplina */}
+      {isCardVisible('disciplines_overview') && (
+        <section
+          className={`${mobileSection === 'goals' ? 'block' : 'hidden'} md:block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 space-y-5`}
+          style={getCardOrderStyle('disciplines_overview')}
+        >
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <div className="flex items-center gap-2 text-[#146C43] dark:text-emerald-400">
+                <Target className="w-4 h-4" />
+                <p className="text-xs font-semibold">
+                  Semana Atual ({currentWeek.label}) ·{' '}
+                  {isMedio ? `Nível Médio (${activeMedioCargo.code})` : 'Nível Superior (PL.AL.102)'}
+                </p>
               </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="pt-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-          <span>Teoria (40%), Questões (40%) e Revisão (20%) por tópico.</span>
-          <button
-            type="button"
-            onClick={() => onNavigate('disciplines')}
-            className="min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-50 text-xs font-semibold text-[#0B3321] hover:bg-emerald-100 whitespace-nowrap"
-          >
-            Atualizar checklist das disciplinas
-          </button>
-        </div>
-      </section>
-
-      {/* SECTION 3: Metas Semanais por Disciplina (Always on Desktop, Tab 'goals' on Mobile) */}
-      <section
-        className={`${mobileSection === 'goals' ? 'block' : 'hidden'} md:block bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-5`}
-      >
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3 pb-4 border-b border-slate-100">
-          <div>
-            <div className="flex items-center gap-2 text-[#146C43]">
-              <Target className="w-4 h-4" />
-              <p className="text-xs font-semibold">
-                Semana Atual ({currentWeek.label}) ·{' '}
-                {isMedio ? `Nível Médio (${activeMedioCargo.code})` : 'Nível Superior (PL.AL.102)'}
+              <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                Metas Semanais por Disciplina
+              </h2>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                Defina quantos minutos deseja estudar por semana em cada matéria e acompanhe seu tempo real.
               </p>
             </div>
-            <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900 mt-0.5">
-              Metas Semanais por Disciplina
-            </h2>
-            <p className="text-xs text-slate-600 mt-0.5">
-              Defina quantos minutos deseja estudar por semana em cada matéria e acompanhe seu tempo real.
-            </p>
+
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs text-slate-600 dark:text-slate-400 font-mono tabular-nums">
+              <span>
+                Estudado: <strong className="text-[#0B3321] dark:text-emerald-300">{totalWeeklyStudiedMinutes}m</strong>
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>
+                Meta: <strong className="text-[#0B3321] dark:text-emerald-300">{totalWeeklyTargetMinutes}m</strong>
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>
+                Cumprimento: <strong className="text-[#0B3321] dark:text-emerald-300">{overallWeeklyGoalPct}%</strong>
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs text-slate-600 font-mono tabular-nums">
-            <span>
-              Estudado: <strong className="text-[#0B3321]">{totalWeeklyStudiedMinutes}m</strong>
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>
-              Meta: <strong className="text-[#0B3321]">{totalWeeklyTargetMinutes}m</strong>
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>
-              Cumprimento: <strong className="text-[#0B3321]">{overallWeeklyGoalPct}%</strong>
-            </span>
-          </div>
-        </div>
+          {goalFeedbackError && (
+            <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-900 dark:text-red-200 rounded-xl px-4 py-2.5 text-xs font-medium">
+              {goalFeedbackError}
+            </div>
+          )}
 
-        {goalFeedbackError && (
-          <div className="bg-red-50 border border-red-200 text-red-900 rounded-xl px-4 py-2.5 text-xs font-medium">
-            {goalFeedbackError}
-          </div>
-        )}
+          <div className="space-y-3.5">
+            {disciplineStats.map((stat) => {
+              const draftValue = goalDrafts[stat.id] ?? String(stat.weeklyGoalMinutes);
+              const hasPendingEdit =
+                goalDrafts[stat.id] !== undefined && Number(goalDrafts[stat.id]) !== stat.weeklyGoalMinutes;
+              const isSaving = savingGoalId === stat.id;
+              const isSaved = Boolean(savedGoalIds[stat.id]);
+              const goalMet = stat.weeklyMinutesLogged >= stat.weeklyGoalMinutes;
+              const remainingMinutes = Math.max(0, stat.weeklyGoalMinutes - stat.weeklyMinutesLogged);
 
-        <div className="space-y-3.5">
-          {disciplineStats.map((stat) => {
-            const draftValue = goalDrafts[stat.id] ?? String(stat.weeklyGoalMinutes);
-            const hasPendingEdit =
-              goalDrafts[stat.id] !== undefined && Number(goalDrafts[stat.id]) !== stat.weeklyGoalMinutes;
-            const isSaving = savingGoalId === stat.id;
-            const isSaved = Boolean(savedGoalIds[stat.id]);
-            const goalMet = stat.weeklyMinutesLogged >= stat.weeklyGoalMinutes;
-            const remainingMinutes = Math.max(0, stat.weeklyGoalMinutes - stat.weeklyMinutesLogged);
+              return (
+                <div
+                  key={stat.id}
+                  className="p-3.5 sm:p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/40 space-y-2.5"
+                >
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs text-slate-500 dark:text-slate-400 font-bold">
+                          {String(stat.rank).padStart(2, '0')}.
+                        </span>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{stat.shortName}</h3>
+                        <span
+                          className={`text-[11px] font-medium ${
+                            stat.hasCustomGoal ? 'text-[#146C43] dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'
+                          }`}
+                        >
+                          {stat.hasCustomGoal ? 'Meta definida' : 'Sugestão inicial'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 font-mono tabular-nums">
+                        Real: <strong className="text-slate-900 dark:text-slate-100">{stat.weeklyMinutesLogged}m</strong> de{' '}
+                        <strong className="text-slate-900 dark:text-slate-100">{stat.weeklyGoalMinutes}m</strong> ·{' '}
+                        <span className={goalMet ? 'text-[#0B3321] dark:text-emerald-300 font-semibold' : 'text-slate-600 dark:text-slate-400'}>
+                          {goalMet
+                            ? stat.weeklyMinutesLogged > stat.weeklyGoalMinutes
+                              ? `+${stat.weeklyMinutesLogged - stat.weeklyGoalMinutes}m`
+                              : 'Atingida!'
+                            : `Faltam ${remainingMinutes}m`}
+                        </span>
+                      </p>
+                    </div>
 
-            return (
-              <div
-                key={stat.id}
-                className="p-3.5 sm:p-4 rounded-xl border border-slate-200/90 bg-slate-50/40 space-y-2.5"
-              >
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs text-slate-500 font-bold">
-                        {String(stat.rank).padStart(2, '0')}.
-                      </span>
-                      <h3 className="text-sm font-bold text-slate-900">{stat.shortName}</h3>
-                      <span
-                        className={`text-[11px] font-medium ${
-                          stat.hasCustomGoal ? 'text-[#146C43]' : 'text-slate-500'
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <label htmlFor={`goal-${stat.id}`} className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                        Meta (min):
+                      </label>
+                      <input
+                        id={`goal-${stat.id}`}
+                        type="number"
+                        min={15}
+                        max={2520}
+                        step={15}
+                        value={draftValue}
+                        onChange={(e) =>
+                          setGoalDrafts((prev) => ({
+                            ...prev,
+                            [stat.id]: e.target.value,
+                          }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            void handleSaveDisciplineGoal(stat.id, stat.weeklyGoalMinutes);
+                          }
+                        }}
+                        className="w-20 min-h-[42px] px-2.5 py-1 text-xs font-mono tabular-nums bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
+                      />
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => void handleSaveDisciplineGoal(stat.id, stat.weeklyGoalMinutes)}
+                        className={`min-h-[42px] px-3.5 py-1.5 text-xs font-semibold rounded-xl inline-flex items-center gap-1 transition-colors whitespace-nowrap ${
+                          isSaved
+                            ? 'bg-emerald-700 text-white'
+                            : hasPendingEdit
+                              ? 'bg-[#0B3321] hover:bg-[#134b32] text-white'
+                              : 'bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:border-[#0B3321] text-slate-800 dark:text-slate-200'
                         }`}
                       >
-                        {stat.hasCustomGoal ? 'Meta definida' : 'Sugestão inicial'}
-                      </span>
+                        {isSaved ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Salvo</span>
+                          </>
+                        ) : isSaving ? (
+                          <span>Salvando...</span>
+                        ) : (
+                          <span>Salvar</span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => onStartFocusTimer(stat.id, stat.firstTopicTitle)}
+                        title="Iniciar cronômetro e registrar minutos nesta disciplina"
+                        className="min-h-[42px] px-3 py-1.5 bg-[#0B3321] text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>Estudar</span>
+                      </button>
                     </div>
-                    <p className="text-xs text-slate-600 mt-0.5 font-mono tabular-nums">
-                      Real: <strong className="text-slate-900">{stat.weeklyMinutesLogged}m</strong> de{' '}
-                      <strong className="text-slate-900">{stat.weeklyGoalMinutes}m</strong> ·{' '}
-                      <span className={goalMet ? 'text-[#0B3321] font-semibold' : 'text-slate-600'}>
-                        {goalMet
-                          ? stat.weeklyMinutesLogged > stat.weeklyGoalMinutes
-                            ? `+${stat.weeklyMinutesLogged - stat.weeklyGoalMinutes}m`
-                            : 'Atingida!'
-                          : `Faltam ${remainingMinutes}m`}
-                      </span>
-                    </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <label htmlFor={`goal-${stat.id}`} className="text-[11px] font-medium text-slate-600">
-                      Meta (min):
-                    </label>
-                    <input
-                      id={`goal-${stat.id}`}
-                      type="number"
-                      min={15}
-                      max={2520}
-                      step={15}
-                      value={draftValue}
-                      onChange={(e) =>
-                        setGoalDrafts((prev) => ({
-                          ...prev,
-                          [stat.id]: e.target.value,
-                        }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          void handleSaveDisciplineGoal(stat.id, stat.weeklyGoalMinutes);
-                        }
-                      }}
-                      className="w-20 min-h-[42px] px-2.5 py-1 text-xs font-mono tabular-nums bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
-                    />
-                    <button
-                      type="button"
-                      disabled={isSaving}
-                      onClick={() => void handleSaveDisciplineGoal(stat.id, stat.weeklyGoalMinutes)}
-                      className={`min-h-[42px] px-3.5 py-1.5 text-xs font-semibold rounded-xl inline-flex items-center gap-1 transition-colors whitespace-nowrap ${
-                        isSaved
-                          ? 'bg-emerald-700 text-white'
-                          : hasPendingEdit
-                            ? 'bg-[#0B3321] hover:bg-[#134b32] text-white'
-                            : 'bg-white border border-slate-300 hover:border-[#0B3321] text-slate-800'
-                      }`}
-                    >
-                      {isSaved ? (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Salvo</span>
-                        </>
-                      ) : isSaving ? (
-                        <span>Salvando...</span>
-                      ) : (
-                        <span>Salvar</span>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => onStartFocusTimer(stat.id, stat.firstTopicTitle)}
-                      title="Iniciar cronômetro e registrar minutos nesta disciplina"
-                      className="min-h-[42px] px-3 py-1.5 bg-[#0B3321] text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
-                    >
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>Estudar</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Barra de Progresso Individual Comparativa */}
-                <div className="flex items-center gap-3">
-                  <div
-                    className="h-3 flex-1 bg-slate-200/80 rounded-full overflow-hidden"
-                    role="progressbar"
-                    aria-label={`Progresso semanal em ${stat.shortName}: ${stat.weeklyMinutesLogged} de ${stat.weeklyGoalMinutes} minutos`}
-                    aria-valuenow={stat.weeklyMinutesLogged}
-                    aria-valuemin={0}
-                    aria-valuemax={stat.weeklyGoalMinutes}
-                  >
+                  <div className="flex items-center gap-3">
                     <div
-                      className="h-full rounded-full transition-all duration-300"
-                      style={{
-                        width: `${stat.weeklyMinutesLogged > 0 ? Math.max(3, stat.weeklyGoalBarPct) : 0}%`,
-                        backgroundColor: goalMet ? '#0B3321' : '#146C43',
-                      }}
-                    />
+                      className="h-3 flex-1 bg-slate-200/80 dark:bg-slate-700 rounded-full overflow-hidden"
+                      role="progressbar"
+                      aria-label={`Progresso semanal em ${stat.shortName}: ${stat.weeklyMinutesLogged} de ${stat.weeklyGoalMinutes} minutos`}
+                      aria-valuenow={stat.weeklyMinutesLogged}
+                      aria-valuemin={0}
+                      aria-valuemax={stat.weeklyGoalMinutes}
+                    >
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{
+                          width: `${stat.weeklyMinutesLogged > 0 ? Math.max(3, stat.weeklyGoalBarPct) : 0}%`,
+                          backgroundColor: goalMet ? '#0B3321' : '#146C43',
+                        }}
+                      />
+                    </div>
+                    <span className="font-mono text-xs font-bold text-[#0B3321] dark:text-emerald-300 tabular-nums w-12 text-right">
+                      {stat.weeklyGoalRawPct}%
+                    </span>
                   </div>
-                  <span
-                    className={`font-mono text-xs font-bold tabular-nums w-12 text-right ${
-                      goalMet ? 'text-[#0B3321]' : 'text-slate-700'
-                    }`}
-                  >
-                    {stat.weeklyGoalRawPct}%
-                  </span>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {readerMaterial && (
+        <BookReaderModal material={readerMaterial} onClose={() => setReaderMaterial(null)} />
+      )}
     </div>
   );
 }

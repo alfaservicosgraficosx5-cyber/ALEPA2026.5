@@ -45,6 +45,11 @@ export interface PdfInspectionResult {
   textLayerStatus: 'selectable' | 'scanned' | 'mixed';
   hasOutline: boolean;
   sampleChars: number;
+  metadataTitle?: string;
+  metadataAuthor?: string;
+  sampleSnippet?: string;
+  outlineTitles?: string[];
+  checksumSha256?: string;
 }
 
 export interface ResolvedPdfSource {
@@ -594,11 +599,13 @@ export async function inspectPdfMetadata(params: {
   workspaceAccessToken?: string | null;
 }): Promise<PdfInspectionResult> {
   let source: ResolvedPdfSource;
+  let sourceDataCopy: Uint8Array | undefined;
   if (params.file) {
     const buffer = await params.file.arrayBuffer();
+    sourceDataCopy = new Uint8Array(buffer);
     source = {
       kind: 'data',
-      data: new Uint8Array(buffer),
+      data: sourceDataCopy,
       fileSizeBytes: buffer.byteLength,
       resolvedFileName: params.file.name,
     };
@@ -607,14 +614,38 @@ export async function inspectPdfMetadata(params: {
       url: params.url,
       workspaceAccessToken: params.workspaceAccessToken,
     });
+    if (source.data) {
+      sourceDataCopy = source.data;
+    }
   } else {
     throw new PdfSourceError('LOAD_FAILED', 'Informe um arquivo ou URL PDF para inspeção.');
+  }
+
+  let checksumSha256: string | undefined;
+  if (sourceDataCopy && typeof crypto !== 'undefined' && crypto.subtle) {
+    try {
+      const copy = new Uint8Array(sourceDataCopy.byteLength);
+      copy.set(sourceDataCopy);
+      const digest = await crypto.subtle.digest('SHA-256', copy.buffer);
+      checksumSha256 = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+    } catch {
+      checksumSha256 = undefined;
+    }
   }
 
   const pdfDoc = await loadPdfDocument(source);
   try {
     const pageCount = pdfDoc.numPages;
     const outline = await pdfDoc.getOutline().catch(() => null);
+    const meta = await pdfDoc.getMetadata().catch(() => null);
+    const infoObj = (meta?.info || {}) as { Title?: unknown; Author?: unknown };
+    const metadataTitle =
+      typeof infoObj.Title === 'string' && infoObj.Title.trim() ? infoObj.Title.trim() : undefined;
+    const metadataAuthor =
+      typeof infoObj.Author === 'string' && infoObj.Author.trim() ? infoObj.Author.trim() : undefined;
+
     const samplePages = new Set<number>([1]);
     if (pageCount >= 2) samplePages.add(2);
     if (pageCount >= 3) samplePages.add(Math.min(pageCount, Math.ceil(pageCount / 2)));
@@ -623,10 +654,14 @@ export async function inspectPdfMetadata(params: {
     let scannedCount = 0;
     let selectableCount = 0;
     let sampleChars = 0;
+    const snippetParts: string[] = [];
 
     for (const p of samplePages) {
       const content = await extractStructuredPageContent(pdfDoc, p);
       sampleChars += content.charCount;
+      if (content.plainText && snippetParts.join(' ').length < 1800) {
+        snippetParts.push(`[Pág. ${p}] ${content.plainText.slice(0, 750)}`);
+      }
       if (content.isLikelyScanned) scannedCount += 1;
       else selectableCount += 1;
     }
@@ -638,12 +673,24 @@ export async function inspectPdfMetadata(params: {
           ? 'scanned'
           : 'mixed';
 
+    const outlineTitles = Array.isArray(outline)
+      ? outline
+          .map((node) => (typeof node?.title === 'string' ? node.title.trim() : ''))
+          .filter(Boolean)
+          .slice(0, 15)
+      : undefined;
+
     return {
       pageCount,
       fileSizeBytes: source.fileSizeBytes,
       textLayerStatus,
       hasOutline: Boolean(outline && outline.length > 0),
       sampleChars,
+      metadataTitle,
+      metadataAuthor,
+      sampleSnippet: snippetParts.join('\n\n').slice(0, 2200) || undefined,
+      outlineTitles: outlineTitles?.length ? outlineTitles : undefined,
+      checksumSha256,
     };
   } finally {
     await pdfDoc.loadingTask.destroy();

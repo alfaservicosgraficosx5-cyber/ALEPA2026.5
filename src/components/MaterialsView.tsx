@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
   ArrowLeft,
+  Bookmark,
   BookOpen,
   ChevronRight,
   ClipboardCheck,
@@ -313,6 +314,8 @@ export function MaterialsView({
     addMaterial,
     deleteMaterial,
     readingProgressMap,
+    preferences,
+    toggleFavoriteMaterial,
     user,
     profile,
     isAdmin,
@@ -341,6 +344,7 @@ export function MaterialsView({
   const [resourceFilter, setResourceFilter] = useState<'all' | ResourceType>('all');
   const [originFilter, setOriginFilter] = useState<'all' | 'official' | 'complementary'>('all');
   const [relevanceFilter, setRelevanceFilter] = useState<'all' | MaterialRelevanceTier>('all');
+  const [onlyFavorites, setOnlyFavorites] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sourceCategoryFilter, setSourceCategoryFilter] = useState<
     'all' | 'oficial_alepa' | 'legislacao_federal' | 'capacitacao_publica' | 'academica_cientifica'
@@ -651,8 +655,10 @@ export function MaterialsView({
   void MEDIO_DEFAULT_MATERIALS;
   void GERAL_DEFAULT_MATERIALS;
 
+  const favoriteMaterialIds = preferences.favoriteMaterialIds || [];
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filtered = campusMaterials.filter((m) => {
+    if (onlyFavorites && !favoriteMaterialIds.includes(m.id)) return false;
     if (selectedCategory !== 'all') {
       const cat = activeCategories.find((c) => c.id === selectedCategory);
       const matchesCat = m.libraryCategoryId
@@ -982,14 +988,14 @@ export function MaterialsView({
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-medium text-emerald-800">
+          <p className="text-xs font-medium text-emerald-800 dark:text-emerald-400">
             {libraryScope === 'geral'
               ? 'Aba Geral · Matérias comuns aos 2 níveis'
               : libraryScope === 'medio'
                 ? 'Aba Conteúdo · Nível Médio (Cargo 04 · PL.AL.060)'
                 : 'Aba Conteúdo · Nível Superior (Cargo 03 · PL.AL.102)'}
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 mt-0.5">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-0.5">
             {libraryScope === 'geral'
               ? 'Geral · Disciplinas Comuns'
               : libraryScope === 'medio'
@@ -1004,11 +1010,11 @@ export function MaterialsView({
             onClick={() => setShowOfficialSources((v) => !v)}
             className={`min-h-[42px] px-3 py-2 border text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap ${
               showOfficialSources
-                ? 'border-[#0B3321] bg-emerald-50 text-[#0B3321]'
-                : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-800'
+                ? 'border-[#0B3321] bg-emerald-50 text-[#0B3321] dark:border-emerald-500 dark:bg-emerald-950/60 dark:text-emerald-200'
+                : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800'
             }`}
           >
-            <Scale className="w-4 h-4 text-[#146C43]" />
+            <Scale className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
             <span>Fontes</span>
           </button>
 
@@ -1017,11 +1023,11 @@ export function MaterialsView({
             onClick={() => setShowDriveTools((v) => !v)}
             className={`min-h-[42px] px-3.5 py-2 border text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center gap-2 whitespace-nowrap ${
               showDriveTools
-                ? 'border-[#0B3321] bg-emerald-50 text-[#0B3321]'
-                : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-800'
+                ? 'border-[#0B3321] bg-emerald-50 text-[#0B3321] dark:border-emerald-500 dark:bg-emerald-950/60 dark:text-emerald-200'
+                : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800'
             }`}
           >
-            <FolderOpen className="w-4 h-4 text-[#146C43]" />
+            <FolderOpen className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
             <span>{showDriveTools ? 'Ocultar Drive' : 'Google Drive'}</span>
           </button>
 
@@ -1046,7 +1052,7 @@ export function MaterialsView({
       </div>
 
       {/* Abas Principais: Geral × Conteúdo (com escolha Superior / Médio dentro de Conteúdo) */}
-      <section className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 space-y-3">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-3">
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
@@ -1054,18 +1060,18 @@ export function MaterialsView({
             className={`min-h-[54px] px-3.5 py-2.5 rounded-xl border text-left transition-colors flex items-center justify-between gap-2 ${
               libraryScope === 'geral'
                 ? 'border-[#0B3321] bg-[#0B3321] text-white'
-                : 'border-slate-200 bg-slate-50 hover:border-slate-300 text-slate-900'
+                : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/70 hover:border-slate-300 text-slate-900 dark:text-slate-100'
             }`}
           >
             <div className="min-w-0">
               <p className="font-display text-sm sm:text-base font-bold truncate">Geral</p>
-              <p className={`text-[11px] truncate ${libraryScope === 'geral' ? 'text-emerald-200' : 'text-slate-500'}`}>
+              <p className={`text-[11px] truncate ${libraryScope === 'geral' ? 'text-emerald-200' : 'text-slate-500 dark:text-slate-400'}`}>
                 Matérias comuns ({geralMaterials.length})
               </p>
             </div>
             <span
               className={`font-mono text-xs font-bold shrink-0 ${
-                libraryScope === 'geral' ? 'text-emerald-300' : 'text-[#146C43]'
+                libraryScope === 'geral' ? 'text-emerald-300' : 'text-[#146C43] dark:text-emerald-400'
               }`}
             >
               {GERAL_LIBRARY_CATEGORIES.length} disc.
@@ -1078,12 +1084,12 @@ export function MaterialsView({
             className={`min-h-[54px] px-3.5 py-2.5 rounded-xl border text-left transition-colors flex items-center justify-between gap-2 ${
               libraryScope !== 'geral'
                 ? 'border-[#0B3321] bg-[#0B3321] text-white'
-                : 'border-slate-200 bg-slate-50 hover:border-slate-300 text-slate-900'
+                : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/70 hover:border-slate-300 text-slate-900 dark:text-slate-100'
             }`}
           >
             <div className="min-w-0">
               <p className="font-display text-sm sm:text-base font-bold truncate">Conteúdo</p>
-              <p className={`text-[11px] truncate ${libraryScope !== 'geral' ? 'text-emerald-200' : 'text-slate-500'}`}>
+              <p className={`text-[11px] truncate ${libraryScope !== 'geral' ? 'text-emerald-200' : 'text-slate-500 dark:text-slate-400'}`}>
                 {libraryScope === 'medio' || (libraryScope === 'geral' && isMedio)
                   ? `Nível Médio (${medioMaterials.length})`
                   : `Nível Superior (${superiorMaterials.length})`}
@@ -1091,7 +1097,7 @@ export function MaterialsView({
             </div>
             <span
               className={`font-mono text-xs font-bold shrink-0 ${
-                libraryScope !== 'geral' ? 'text-emerald-300' : 'text-[#146C43]'
+                libraryScope !== 'geral' ? 'text-emerald-300' : 'text-[#146C43] dark:text-emerald-400'
               }`}
             >
               {isMedio ? MEDIO_LIBRARY_CATEGORIES.length : LIBRARY_CATEGORIES.length} disc.
@@ -1101,8 +1107,8 @@ export function MaterialsView({
 
         {/* Seletor rápido de Cargo dentro da Aba Conteúdo */}
         {libraryScope !== 'geral' && (
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
-            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl w-full sm:w-auto">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-full sm:w-auto">
               <button
                 type="button"
                 onClick={() => {
@@ -1110,7 +1116,9 @@ export function MaterialsView({
                   onChangeCampus?.('superior');
                 }}
                 className={`min-h-[36px] px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
-                  libraryScope === 'superior' ? 'bg-white text-[#0B3321] shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  libraryScope === 'superior'
+                    ? 'bg-white dark:bg-slate-900 text-[#0B3321] dark:text-emerald-300 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 Superior · Cargo 03 ({superiorMaterials.length})
@@ -1122,7 +1130,9 @@ export function MaterialsView({
                   onChangeCampus?.('medio');
                 }}
                 className={`min-h-[36px] px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
-                  libraryScope === 'medio' ? 'bg-white text-[#0B3321] shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  libraryScope === 'medio'
+                    ? 'bg-white dark:bg-slate-900 text-[#0B3321] dark:text-emerald-300 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 Médio · Cargo 04 ({medioMaterials.length})
@@ -1132,7 +1142,7 @@ export function MaterialsView({
             <button
               type="button"
               onClick={() => setShowOrgMatrix((v) => !v)}
-              className="text-xs font-semibold text-[#0B3321] hover:underline"
+              className="text-xs font-semibold text-[#0B3321] dark:text-emerald-400 hover:underline"
             >
               {showOrgMatrix ? 'Ocultar matriz' : 'Ver matriz de compartilhamento'}
             </button>
@@ -1148,15 +1158,15 @@ export function MaterialsView({
           .slice(0, 4);
         if (recentReadings.length === 0) return null;
         return (
-          <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3">
+          <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-[11px] font-semibold text-[#146C43]">Leitor Digital Integrado</p>
-                <h2 className="font-display text-base font-bold text-slate-900">
+                <p className="text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">Leitor Digital Integrado</p>
+                <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
                   Continuar leitura de onde você parou
                 </h2>
               </div>
-              <span className="text-xs text-slate-500 font-mono">
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                 {recentReadings.length} {recentReadings.length === 1 ? 'livro recente' : 'livros recentes'}
               </span>
             </div>
@@ -1185,20 +1195,20 @@ export function MaterialsView({
                 return (
                   <div
                     key={rp.materialId}
-                    className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex flex-col justify-between gap-2.5"
+                    className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60 flex flex-col justify-between gap-2.5"
                   >
                     <div className="space-y-1.5">
-                      <p className="text-xs font-bold text-slate-900 line-clamp-2">{rp.materialTitle}</p>
-                      <p className="text-[11px] text-slate-600 font-mono tabular-nums">
+                      <p className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-2">{rp.materialTitle}</p>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 font-mono tabular-nums">
                         Pág. {rp.lastPage}/{rp.totalPages} · {rp.progressPercent}%
                       </p>
-                      <div className="h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
+                      <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                         <div
                           className="h-full bg-[#146C43] rounded-full"
                           style={{ width: `${Math.min(100, Math.max(2, rp.progressPercent))}%` }}
                         />
                       </div>
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         {rp.bookmarks.length} marc. · {rp.highlights.length} dest. · {rp.annotations.length} notas
                         {formattedDate ? ` · ${formattedDate}` : ''}
                       </p>
@@ -1213,7 +1223,7 @@ export function MaterialsView({
                         <span>Continuar leitura</span>
                       </button>
                     ) : (
-                      <span className="text-[11px] text-slate-500">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
                         Material removido do acervo
                       </span>
                     )}
@@ -1226,10 +1236,10 @@ export function MaterialsView({
       })()}
 
       {/* Aba dedicada para Adicionar PDF, Vídeo, Podcast e Outros */}
-      <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold text-[#146C43]">
+            <p className="text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">
               Cadastro rápido ·{' '}
               {libraryScope === 'geral'
                 ? 'Geral (Comum)'
@@ -1237,12 +1247,12 @@ export function MaterialsView({
                   ? 'Nível Médio'
                   : 'Nível Superior (Cargo 03 · Analista Adm.)'}
             </p>
-            <h2 className="font-display text-base font-bold text-slate-900">
+            <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
               Aba para adicionar PDF, Vídeo, Podcast e Outros
             </h2>
           </div>
 
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-xl w-full sm:w-fit">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-full sm:w-fit">
             {(
               [
                 { id: 'pdf', label: 'PDF', icon: FileText },
@@ -1266,7 +1276,7 @@ export function MaterialsView({
                     }
                   }}
                   className={`min-h-[44px] sm:min-h-[38px] px-3.5 py-2 sm:py-1.5 text-xs font-semibold rounded-lg inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap ${
-                    active ? 'bg-[#0B3321] text-white shadow-xs' : 'text-slate-700 hover:bg-white'
+                    active ? 'bg-[#0B3321] text-white shadow-xs' : 'text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700'
                   }`}
                 >
                   <TabIcon className="w-3.5 h-3.5" />
@@ -1940,8 +1950,8 @@ export function MaterialsView({
         </section>
       )}
 
-      {/* Central Inteligente: Busca + Relevância + 8 Tipos + Origem */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 space-y-3">
+      {/* Central Inteligente: Busca + Relevância + Favoritos + 8 Tipos + Origem */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-3">
         <div className="flex flex-col lg:flex-row lg:items-center gap-2.5">
           <div className="relative flex-1 min-w-0">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -1950,40 +1960,61 @@ export function MaterialsView({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Buscar por título, assunto do edital, instituição ou palavra-chave..."
-              className="w-full min-h-[42px] pl-10 pr-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
+              className="w-full min-h-[42px] pl-10 pr-3.5 py-2 text-sm border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-xl w-full lg:w-auto">
-            {(
-              [
-                { id: 'all', label: 'Toda relevância' },
-                { id: 'essencial', label: 'Essencial' },
-                { id: 'complementar', label: 'Complementar' },
-                { id: 'aprofundamento', label: 'Aprofundamento' },
-              ] as const
-            ).map((rel) => (
-              <button
-                key={rel.id}
-                type="button"
-                onClick={() => setRelevanceFilter(rel.id)}
-                className={`min-h-[36px] px-2.5 py-1 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
-                  relevanceFilter === rel.id ? 'bg-[#0B3321] text-white' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {rel.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setOnlyFavorites((v) => !v)}
+              className={`min-h-[40px] px-3 py-1.5 text-xs font-semibold rounded-xl border inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                onlyFavorites
+                  ? 'border-amber-500 bg-amber-50 text-amber-900 dark:border-amber-500 dark:bg-amber-950/60 dark:text-amber-200'
+                  : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
+              }`}
+            >
+              <Bookmark className={`w-3.5 h-3.5 ${onlyFavorites ? 'fill-current' : ''}`} />
+              <span>
+                Favoritos ({campusMaterials.filter((m) => favoriteMaterialIds.includes(m.id)).length})
+              </span>
+            </button>
+
+            <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-full lg:w-auto">
+              {(
+                [
+                  { id: 'all', label: 'Toda relevância' },
+                  { id: 'essencial', label: 'Essencial' },
+                  { id: 'complementar', label: 'Complementar' },
+                  { id: 'aprofundamento', label: 'Aprofundamento' },
+                ] as const
+              ).map((rel) => (
+                <button
+                  key={rel.id}
+                  type="button"
+                  onClick={() => setRelevanceFilter(rel.id)}
+                  className={`min-h-[36px] px-2.5 py-1 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
+                    relevanceFilter === rel.id
+                      ? 'bg-[#0B3321] text-white'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  {rel.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
-          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-xl w-full xl:w-auto max-w-full">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-full xl:w-auto max-w-full">
             <button
               type="button"
               onClick={() => setResourceFilter('all')}
               className={`min-h-[36px] px-2.5 py-1 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
-                resourceFilter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                resourceFilter === 'all'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               Todos os 8 tipos
@@ -1994,7 +2025,9 @@ export function MaterialsView({
                 type="button"
                 onClick={() => setResourceFilter(rt.id)}
                 className={`min-h-[36px] px-2.5 py-1 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
-                  resourceFilter === rt.id ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  resourceFilter === rt.id
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 {rt.label}
@@ -2002,7 +2035,7 @@ export function MaterialsView({
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-xl w-full xl:w-auto shrink-0">
+          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-full xl:w-auto shrink-0">
             {(
               [
                 { id: 'all', label: 'Tudo' },
@@ -2015,7 +2048,9 @@ export function MaterialsView({
                 type="button"
                 onClick={() => setOriginFilter(opt.id)}
                 className={`min-h-[36px] px-3 py-1 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
-                  originFilter === opt.id ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  originFilter === opt.id
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 {opt.label}
@@ -2026,17 +2061,17 @@ export function MaterialsView({
       </div>
 
       {feedback && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-4 py-3 text-sm font-medium">
+        <div className="bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 rounded-xl px-4 py-3 text-sm font-medium">
           {feedback}
         </div>
       )}
 
       {/* Cataloged Materials Grid with full 11 metadata attributes */}
       {filtered.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-600 space-y-2">
-          <p className="font-medium text-slate-800">Nenhum material catalogado para essa combinação de filtros.</p>
-          <p className="text-xs text-slate-500">
-            Você pode alterar os filtros acima ou clicar em "Catalogar material ou pasta" para cadastrar um novo recurso
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center text-slate-600 dark:text-slate-300 space-y-2">
+          <p className="font-medium text-slate-800 dark:text-slate-100">Nenhum material catalogado para essa combinação de filtros.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Você pode alterar os filtros acima ou clicar em "Incluir conteúdo" para cadastrar um novo recurso
             ou pasta do Google Drive nesta categoria.
           </p>
         </div>
@@ -2047,6 +2082,7 @@ export function MaterialsView({
             const isLocal = mat.url.startsWith('local://');
             const allowDownload = mat.allowDownload !== false;
             const isPdfBook = isPdfReadableMaterial(mat);
+            const isFavorited = favoriteMaterialIds.includes(mat.id);
             const readingProgress =
               readingProgressMap[getMaterialProgressKey(mat.id)] || readingProgressMap[mat.id];
             const parsedUrl = parseGoogleWorkspaceUrl(mat.url);
@@ -2072,28 +2108,42 @@ export function MaterialsView({
             return (
               <article
                 key={mat.id}
-                className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-between gap-4"
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex flex-col justify-between gap-4"
               >
                 <div className="space-y-2.5">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
                     <div className="flex items-center gap-2">
                       {ytId ? (
                         <YouTubeBrandIcon className="w-4 h-4" />
                       ) : (
-                        <Icon className="w-4 h-4 text-[#0B3321]" />
+                        <Icon className="w-4 h-4 text-[#0B3321] dark:text-emerald-400" />
                       )}
-                      <span className="font-semibold text-slate-800">{resLabel}</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">{resLabel}</span>
                       <span aria-hidden="true">·</span>
                       <span>{catTitle}</span>
                     </div>
-                    <span className={mat.isOfficialContent ? 'font-semibold text-[#146C43]' : 'text-amber-800 font-medium'}>
-                      {inferMaterialRelevance(mat) === 'essencial'
-                        ? 'Essencial'
-                        : inferMaterialRelevance(mat) === 'aprofundamento'
-                          ? 'Aprofundamento'
-                          : 'Complementar'}{' '}
-                      · {mat.isOfficialContent ? 'Oficial' : 'Treino'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={mat.isOfficialContent ? 'font-semibold text-[#146C43] dark:text-emerald-400' : 'text-amber-800 dark:text-amber-300 font-medium'}>
+                        {inferMaterialRelevance(mat) === 'essencial'
+                          ? 'Essencial'
+                          : inferMaterialRelevance(mat) === 'aprofundamento'
+                            ? 'Aprofundamento'
+                            : 'Complementar'}{' '}
+                        · {mat.isOfficialContent ? 'Oficial' : 'Treino'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void toggleFavoriteMaterial(mat.id)}
+                        aria-label={isFavorited ? `Remover ${mat.title} dos favoritos` : `Salvar ${mat.title} nos favoritos`}
+                        className={`p-1.5 rounded-lg border transition-colors ${
+                          isFavorited
+                            ? 'border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-500 dark:bg-amber-950/60 dark:text-amber-300'
+                            : 'border-slate-200 dark:border-slate-700 text-slate-400 hover:text-amber-600 dark:hover:text-amber-300'
+                        }`}
+                      >
+                        <Bookmark className={`w-3.5 h-3.5 ${isFavorited ? 'fill-current' : ''}`} />
+                      </button>
+                    </div>
                   </div>
 
                   {ytId && (
@@ -2122,13 +2172,13 @@ export function MaterialsView({
                     </button>
                   )}
 
-                  <h2 className="font-display text-lg font-bold text-slate-900">{mat.title}</h2>
-                  {mat.description && <p className="text-sm text-slate-600 line-clamp-2">{mat.description}</p>}
+                  <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">{mat.title}</h2>
+                  {mat.description && <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2">{mat.description}</p>}
 
                   {(readingProgress || mat.pageCount || mat.textLayerStatus || !allowDownload || mat.version) && (
-                    <div className="text-[11px] text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300 flex flex-wrap items-center gap-x-2 gap-y-1">
                       {readingProgress && (
-                        <span className="font-semibold text-[#146C43] font-mono tabular-nums">
+                        <span className="font-semibold text-[#146C43] dark:text-emerald-400 font-mono tabular-nums">
                           Lido {readingProgress.progressPercent}% · pág. {readingProgress.lastPage}/{readingProgress.totalPages}
                         </span>
                       )}
@@ -2136,45 +2186,45 @@ export function MaterialsView({
                         <span className="font-mono tabular-nums">{mat.pageCount} págs.</span>
                       )}
                       {mat.textLayerStatus === 'scanned' && (
-                        <span className="text-amber-700 font-medium">Digitalizado</span>
+                        <span className="text-amber-700 dark:text-amber-400 font-medium">Digitalizado</span>
                       )}
                       {mat.version && (
                         <span className="font-mono">v{mat.version}</span>
                       )}
                       {!allowDownload && (
-                        <span className="text-slate-700 font-medium">Somente leitura (download restrito)</span>
+                        <span className="text-slate-700 dark:text-slate-300 font-medium">Somente leitura (download restrito)</span>
                       )}
                     </div>
                   )}
 
                   {/* Structured Catalog Metadata */}
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 pt-2 border-t border-slate-100 text-[11px] text-slate-600">
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-300">
                     <div className="col-span-2 truncate">
-                      <dt className="inline font-semibold text-slate-700">Tópico do edital: </dt>
+                      <dt className="inline font-semibold text-slate-700 dark:text-slate-200">Tópico do edital: </dt>
                       <dd className="inline">{mat.editalTopic || getDisciplineShortName(mat.disciplineId)}</dd>
                     </div>
                     <div className="truncate">
-                      <dt className="inline font-semibold text-slate-700">Instituição: </dt>
+                      <dt className="inline font-semibold text-slate-700 dark:text-slate-200">Instituição: </dt>
                       <dd className="inline">{mat.institution || 'Institucional'}</dd>
                     </div>
                     <div>
-                      <dt className="inline font-semibold text-slate-700">Acesso: </dt>
+                      <dt className="inline font-semibold text-slate-700 dark:text-slate-200">Acesso: </dt>
                       <dd className="inline">
                         {mat.pricing === 'pago' ? 'Pago' : 'Gratuito'} · {LINK_STATUS_LABELS[mat.linkStatus || 'ativo']}
                       </dd>
                     </div>
                     <div className="font-mono tabular-nums">
-                      <dt className="inline font-sans font-semibold text-slate-700">Publicado: </dt>
+                      <dt className="inline font-sans font-semibold text-slate-700 dark:text-slate-200">Publicado: </dt>
                       <dd className="inline">{mat.publishedAt || '2026-11-13'}</dd>
                     </div>
                     <div className="font-mono tabular-nums">
-                      <dt className="inline font-sans font-semibold text-slate-700">Verificado: </dt>
+                      <dt className="inline font-sans font-semibold text-slate-700 dark:text-slate-200">Verificado: </dt>
                       <dd className="inline">{mat.lastVerifiedAt || '2026-11-13'}</dd>
                     </div>
                   </dl>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
@@ -2208,7 +2258,7 @@ export function MaterialsView({
                         href={mat.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="min-h-[40px] px-3.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-medium rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
+                        className="min-h-[40px] px-3.5 py-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-medium rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
                       >
                         <span>Abrir link</span>
                         <ExternalLink className="w-3.5 h-3.5" />
@@ -2232,9 +2282,9 @@ export function MaterialsView({
                               disciplineId: mat.disciplineId,
                             })
                           }
-                          className="min-h-[40px] px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[#0B3321] text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
+                          className="min-h-[40px] px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[#0B3321] dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 dark:border-emerald-800 dark:text-emerald-300 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
                         >
-                          <Sparkles className="w-3.5 h-3.5 text-[#146C43]" />
+                          <Sparkles className="w-3.5 h-3.5 text-[#146C43] dark:text-emerald-400" />
                           <span>Resumo Gemini</span>
                         </button>
                       )}
@@ -2245,7 +2295,7 @@ export function MaterialsView({
                       type="button"
                       onClick={() => handleDelete(mat)}
                       aria-label="Excluir material"
-                      className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-slate-400 hover:text-red-700 hover:bg-red-50"
+                      className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-slate-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

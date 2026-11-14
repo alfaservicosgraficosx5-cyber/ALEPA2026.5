@@ -15,10 +15,14 @@ export function PageHeader({
     <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
       <div className="min-w-0">
         {eyebrow && (
-          <p className="text-xs font-semibold text-[var(--brand-primary)] tracking-tight">{eyebrow}</p>
+          <p className="text-xs font-semibold text-[var(--brand-primary)] dark:text-emerald-400 tracking-tight">
+            {eyebrow}
+          </p>
         )}
-        <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 mt-1">{title}</h1>
-        {subtitle && <p className="text-sm text-slate-600 mt-1 max-w-3xl">{subtitle}</p>}
+        <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1">
+          {title}
+        </h1>
+        {subtitle && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 max-w-3xl">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
     </div>
@@ -38,20 +42,20 @@ export function StatTile({
 }) {
   const valClass =
     accent === 'brand'
-      ? 'text-[#0B3321]'
+      ? 'text-[#0B3321] dark:text-emerald-300'
       : accent === 'success'
-        ? 'text-[#16A34A]'
+        ? 'text-[#16A34A] dark:text-emerald-400'
         : accent === 'warning'
-          ? 'text-amber-700'
-          : 'text-slate-900';
+          ? 'text-amber-700 dark:text-amber-400'
+          : 'text-slate-900 dark:text-slate-100';
 
   return (
-    <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5">
-      <p className="text-xs font-medium text-slate-500">{label}</p>
+    <div className="campus-card bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-4 sm:p-5">
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
       <p className={`font-display text-2xl sm:text-3xl font-bold font-mono tabular-nums mt-1 ${valClass}`}>
         {value}
       </p>
-      {hint && <p className="text-xs text-slate-500 mt-1 truncate">{hint}</p>}
+      {hint && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">{hint}</p>}
     </div>
   );
 }
@@ -70,12 +74,18 @@ export function SectionCard({
   className?: string;
 }) {
   return (
-    <section className={`bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 ${className}`}>
+    <section
+      className={`campus-card bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 ${className}`}
+    >
       {(title || rightSlot) && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 mb-4 border-b border-slate-100">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
           <div>
-            {title && <h2 className="font-display text-base sm:text-lg font-bold text-slate-900">{title}</h2>}
-            {subtitle && <p className="text-xs text-slate-600 mt-0.5">{subtitle}</p>}
+            {title && (
+              <h2 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+                {title}
+              </h2>
+            )}
+            {subtitle && <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{subtitle}</p>}
           </div>
           {rightSlot && <div className="shrink-0">{rightSlot}</div>}
         </div>
@@ -97,12 +107,12 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
-      <div className="w-11 h-11 rounded-2xl bg-[#E8F3EC] text-[#146C43] flex items-center justify-center mx-auto">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center space-y-3">
+      <div className="w-11 h-11 rounded-2xl bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#146C43] dark:text-emerald-300 flex items-center justify-center mx-auto">
         <Icon className="w-5 h-5" />
       </div>
-      <h3 className="font-display text-base sm:text-lg font-bold text-slate-900">{title}</h3>
-      <p className="text-sm text-slate-600 max-w-md mx-auto leading-relaxed">{description}</p>
+      <h3 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">{title}</h3>
+      <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto leading-relaxed">{description}</p>
       {action && <div className="pt-1 flex justify-center">{action}</div>}
     </div>
   );

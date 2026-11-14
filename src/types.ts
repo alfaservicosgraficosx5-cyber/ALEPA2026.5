@@ -1,6 +1,6 @@
-export type UserRole = 'student' | 'editor' | 'admin' | 'dev' | 'teacher';
-export type NormalizedUserRole = 'student' | 'editor' | 'admin' | 'dev';
-export type PublicationStatus = 'draft' | 'published' | 'archived';
+export type UserRole = 'student' | 'teacher' | 'editor' | 'admin' | 'dev';
+export type NormalizedUserRole = 'student' | 'teacher' | 'editor' | 'admin' | 'dev';
+export type PublicationStatus = 'draft' | 'in_review' | 'approved' | 'published' | 'archived';
 
 export function normalizeUserRole(
   role?: string | null,
@@ -9,32 +9,69 @@ export function normalizeUserRole(
   if (isPrimaryAdmin) {
     return role === 'dev' ? 'dev' : 'admin';
   }
-  if (role === 'admin' || role === 'dev' || role === 'editor' || role === 'student') {
+  if (
+    role === 'admin' ||
+    role === 'dev' ||
+    role === 'editor' ||
+    role === 'teacher' ||
+    role === 'student'
+  ) {
     return role;
-  }
-  if (role === 'teacher') {
-    return 'editor';
   }
   return 'student';
 }
 
+export function isAdminOrDevRole(role?: string | null, isPrimaryAdmin = false): boolean {
+  const normalized = normalizeUserRole(role, isPrimaryAdmin);
+  return normalized === 'admin' || normalized === 'dev';
+}
+
+export function isEditorRole(role?: string | null, isPrimaryAdmin = false): boolean {
+  const normalized = normalizeUserRole(role, isPrimaryAdmin);
+  return normalized === 'editor' || isAdminOrDevRole(normalized, isPrimaryAdmin);
+}
+
+export function isTeacherRole(role?: string | null, isPrimaryAdmin = false): boolean {
+  const normalized = normalizeUserRole(role, isPrimaryAdmin);
+  return normalized === 'teacher';
+}
+
+export function canAccessAdminRole(role?: string | null, isPrimaryAdmin = false): boolean {
+  return isEditorRole(role, isPrimaryAdmin);
+}
+
+export function canAccessTeacherRole(role?: string | null, isPrimaryAdmin = false): boolean {
+  const normalized = normalizeUserRole(role, isPrimaryAdmin);
+  return normalized === 'teacher' || isEditorRole(normalized, isPrimaryAdmin);
+}
+
+export function canPublishInstitutionalRole(role?: string | null, isPrimaryAdmin = false): boolean {
+  return isEditorRole(role, isPrimaryAdmin);
+}
+
 export function isStaffRole(role?: string | null, isPrimaryAdmin = false): boolean {
   const normalized = normalizeUserRole(role, isPrimaryAdmin);
-  return normalized === 'admin' || normalized === 'editor' || normalized === 'dev';
+  return (
+    normalized === 'admin' ||
+    normalized === 'editor' ||
+    normalized === 'teacher' ||
+    normalized === 'dev'
+  );
 }
 
 export function canManageUsersRole(role?: string | null, isPrimaryAdmin = false): boolean {
-  const normalized = normalizeUserRole(role, isPrimaryAdmin);
-  return normalized === 'admin' || normalized === 'dev';
+  return isAdminOrDevRole(role, isPrimaryAdmin);
 }
 
 export function formatRoleLabel(role?: string | null, isPrimaryAdmin = false): string {
   const normalized = normalizeUserRole(role, isPrimaryAdmin);
   switch (normalized) {
     case 'admin':
-      return 'Administrador';
+      return 'Administrador Principal';
     case 'editor':
-      return 'Editor / Professor';
+      return 'Administrador de Conteúdo';
+    case 'teacher':
+      return 'Professor';
     case 'dev':
       return 'Desenvolvedor';
     default:
@@ -48,6 +85,7 @@ export type MedioCargoGroup = 'cargo_01_04' | 'cargo_01' | 'cargo_02' | 'cargo_0
 
 export type NavSection =
   | 'dashboard'
+  | 'classroom'
   | 'preparation'
   | 'disciplines'
   | 'study_room'
@@ -61,6 +99,7 @@ export type NavSection =
   | 'performance'
   | 'family'
   | 'settings'
+  | 'teacher'
   | 'admin';
 
 export type BlockType = 'theory' | 'questions' | 'correction' | 'revision';
@@ -129,14 +168,43 @@ export type QuestionOriginType =
   | 'ai_generated';
 
 export type QuestionDifficulty = 'basico' | 'intermediario' | 'avancado';
+export type QuestionFormat = 'objetiva' | 'discursiva';
 
 export type ErrorReason = 'atencao' | 'teoria' | 'lei_seca' | 'banca_cetap';
+
+export type ThemeModePreference = 'light' | 'dark' | 'auto';
+export type AccentPalette = 'emerald' | 'indigo' | 'amber' | 'teal';
+export type FontScalePreference = 'sm' | 'md' | 'lg';
+export type DensityPreference = 'comfortable' | 'compact';
+
+export interface CustomShortcut {
+  id: string;
+  label: string;
+  section: NavSection;
+}
+
+export interface StudentPreferences {
+  theme: ThemeModePreference;
+  accentColor: AccentPalette;
+  fontScale: FontScalePreference;
+  density: DensityPreference;
+  hiddenDashboardCards: string[];
+  dashboardCardOrder: string[];
+  favoriteMaterialIds: string[];
+  favoriteQuestionIds: string[];
+  favoriteTopicIds: string[];
+  customShortcuts: CustomShortcut[];
+}
 
 export interface UserProfile {
   uid: string;
   displayName: string;
   email?: string;
   role: UserRole;
+  active?: boolean;
+  assignedClassIds?: string[];
+  assignedDisciplineIds?: string[];
+  preferences?: StudentPreferences;
   dailyGoalMinutes: number;
   examDate: string;
   targetCargo: string;
@@ -222,6 +290,9 @@ export interface Question {
   originType?: QuestionOriginType;
   isOfficial?: boolean;
   difficulty?: QuestionDifficulty;
+  questionFormat?: QuestionFormat;
+  classId?: string;
+  reviewNotes?: string;
   year?: number;
   cargo?: string;
   escolaridade?: CampusLevel;
@@ -262,6 +333,8 @@ export interface ErrorEntry {
   updatedAt?: unknown;
 }
 
+export type StorageProviderType = 'firebase_storage' | 'google_drive' | 'local' | 'external';
+
 export interface StudyMaterial {
   id: string;
   ownerId: string;
@@ -282,6 +355,16 @@ export interface StudyMaterial {
   campusLevel?: LibraryScope;
   status?: PublicationStatus;
   updatedBy?: string;
+  reviewedBy?: string;
+  reviewNotes?: string;
+  classId?: string;
+  keywords?: string[];
+  author?: string;
+  edition?: string;
+  year?: number;
+  checksumSha256?: string;
+  storageProvider?: StorageProviderType;
+  storagePath?: string;
   fileName?: string;
   description?: string;
   isShared: boolean;
@@ -463,4 +546,155 @@ export interface ReadingProgress {
   lastReadAt: string;
   updatedAt?: unknown;
 }
+
+export interface ExamConcurso {
+  id: string;
+  examId: string;
+  title: string;
+  institution: string;
+  code: string;
+  year: number;
+  levels: CampusLevel[];
+  positions: string[];
+  examDate?: string;
+  status: PublicationStatus;
+  authorId: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface Classroom {
+  id: string;
+  classId: string;
+  name: string;
+  code: string;
+  examId: string;
+  campusLevel: CampusLevel;
+  disciplineIds: string[];
+  teacherIds: string[];
+  description?: string;
+  active: boolean;
+  status: PublicationStatus;
+  authorId: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface ClassEnrollment {
+  id: string;
+  enrollmentId: string;
+  classId: string;
+  studentId: string;
+  studentName: string;
+  studentEmail?: string;
+  teacherId: string;
+  status: 'active' | 'inactive';
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface Lesson {
+  id: string;
+  lessonId: string;
+  classId: string;
+  disciplineId: string;
+  campusLevel: CampusLevel;
+  title: string;
+  summary: string;
+  content: string;
+  videoUrl?: string;
+  materialIds: string[];
+  order: number;
+  status: PublicationStatus;
+  authorId: string;
+  reviewedBy?: string;
+  reviewNotes?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface Activity {
+  id: string;
+  activityId: string;
+  classId: string;
+  disciplineId: string;
+  campusLevel: CampusLevel;
+  title: string;
+  instructions: string;
+  activityType: 'objetiva' | 'discursiva' | 'mista';
+  dueDate?: string;
+  maxScore: number;
+  questionIds: string[];
+  prompts: string[];
+  status: PublicationStatus;
+  authorId: string;
+  reviewedBy?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface SubmissionRevision {
+  gradedBy: string;
+  score: number;
+  feedback: string;
+  gradedAt: string;
+}
+
+export interface ActivitySubmission {
+  id: string;
+  submissionId: string;
+  activityId: string;
+  classId: string;
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  objectiveAnswers: Record<string, number>;
+  discursiveResponses: Record<string, string>;
+  objectiveScore: number;
+  manualScore: number;
+  finalScore: number;
+  feedback?: string;
+  status: 'submitted' | 'graded' | 'returned';
+  gradedBy?: string;
+  revisionHistory: SubmissionRevision[];
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export type StorageObjectCategory = 'pdf' | 'video' | 'audio' | 'image' | 'other';
+
+export interface StorageMetadataRecord {
+  id: string;
+  fileId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  checksumSha256?: string;
+  storageProvider: StorageProviderType;
+  bucket: string;
+  objectPath: string;
+  downloadUrl: string;
+  category: StorageObjectCategory;
+  campusLevel: LibraryScope;
+  linkedMaterialId?: string;
+  version: number;
+  archived: boolean;
+  uploadedBy: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  logId: string;
+  actorId: string;
+  actorEmail?: string;
+  actorRole: NormalizedUserRole;
+  action: string;
+  targetCollection: string;
+  targetId: string;
+  summary: string;
+  createdAt?: unknown;
+}
+
 
