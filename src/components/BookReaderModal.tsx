@@ -365,8 +365,9 @@ export function BookReaderModal({
   const [measuredWidth, setMeasuredWidth] = useState<number>(760);
 
   // Active reader settings & reading state
-  const [currentPage, setCurrentPage] = useState<number>(Math.max(1, initialSaved?.lastPage || 1));
-  const [pageInput, setPageInput] = useState<string>(String(Math.max(1, initialSaved?.lastPage || 1)));
+  const initialPageVal = Math.max(1, initialSaved?.lastPage || material.startPage || 1);
+  const [currentPage, setCurrentPage] = useState<number>(initialPageVal);
+  const [pageInput, setPageInput] = useState<string>(String(initialPageVal));
   const [readingMode, setReadingMode] = useState<BookReaderMode>(initialSaved?.readingMode || 'book');
   const [bookSpread, setBookSpread] = useState<'auto' | 'single' | 'double'>('auto');
   const [theme, setTheme] = useState<BookReaderTheme>(initialSaved?.theme || 'paper');
@@ -937,6 +938,22 @@ export function BookReaderModal({
     }
   };
 
+  const handleViewportClick = (e: React.MouseEvent) => {
+    if (!isFullscreen) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('a') || target.closest('input') || target.closest('.pdf-text-layer')) {
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const width = rect.width;
+    if (x < width * 0.3) {
+      goPrev();
+    } else if (x > width * 0.7) {
+      goNext();
+    }
+  };
+
   const handleReadingTextMouseUp = () => {
     const sel = window.getSelection()?.toString().replace(/\s+/g, ' ').trim();
     if (sel && sel.length >= 4) {
@@ -1365,7 +1382,8 @@ export function BookReaderModal({
       className={`fixed inset-0 z-50 flex flex-col ${themeStyle.shellBg} ${themeStyle.textMain}`}
     >
       {/* Top Toolbar */}
-      <header className={`border-b px-3 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-2 ${themeStyle.headerBg}`}>
+      {!isFullscreen && (
+        <header className={`border-b px-3 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-2 ${themeStyle.headerBg}`}>
         <div className="flex items-center gap-2 min-w-0 max-w-full sm:max-w-[38%]">
           <button
             type="button"
@@ -1378,7 +1396,9 @@ export function BookReaderModal({
           <div className="min-w-0">
             <h2 className="font-display text-sm sm:text-base font-bold truncate">{material.title}</h2>
             <p className={`text-[11px] truncate ${themeStyle.textMuted}`}>
-              {material.institution || 'Acervo ALEPA'}
+              {material.isVirtualSection && material.startPage && material.endPage
+                ? `Seção Virtual · Págs. ${material.startPage}–${material.endPage}`
+                : material.institution || 'Acervo ALEPA'}
               {material.version ? ` · v${material.version}` : ''}
               {fileSizeBytes ? ` · ${formatBytes(fileSizeBytes)}` : ''}
               {!allowDownload ? ' · Somente leitura' : ''}
@@ -1414,7 +1434,8 @@ export function BookReaderModal({
         </div>
 
         {/* Utility Actions */}
-        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+        {!isFullscreen && (
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
           {/* Theme switch */}
           <button
             type="button"
@@ -1541,11 +1562,13 @@ export function BookReaderModal({
               <span className="hidden lg:inline">Protegido</span>
             </span>
           )}
-        </div>
+          </div>
+        )}
       </header>
+      )}
 
       {/* Secondary Mode-Specific Controls Bar */}
-      {!loadingDoc && !loadError && (
+      {!isFullscreen && !loadingDoc && !loadError && (
         <div className={`border-b px-3 sm:px-5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs ${themeStyle.headerBg}`}>
           {readingMode === 'book' && (
             <div className="flex flex-wrap items-center gap-3">
@@ -1652,7 +1675,7 @@ export function BookReaderModal({
             </div>
           )}
 
-          {readingMode === 'original' && (
+          {(readingMode === 'original' || readingMode === 'book') && (
             <div className="flex flex-wrap items-center gap-2">
               <span className={themeStyle.textMuted}>Zoom:</span>
               <button
@@ -1790,6 +1813,7 @@ export function BookReaderModal({
           ref={viewportAreaRef}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
+          onClick={handleViewportClick}
           onContextMenu={allowDownload ? undefined : (e) => e.preventDefault()}
           className={`flex-1 min-w-0 overflow-y-auto overflow-x-auto p-3 sm:p-6 flex flex-col items-center ${themeStyle.surfaceBg}`}
         >
@@ -1848,6 +1872,7 @@ export function BookReaderModal({
                       pdfDoc={pdfDoc}
                       pageNumber={currentPage}
                       targetWidth={bookSpreadPageWidth}
+                      scaleOverride={zoomScale > 0 ? zoomScale : undefined}
                       theme={theme}
                       allowDownload={allowDownload}
                       onTextSelected={(quote, p) => setSelectedQuote({ quote, page: p })}
@@ -1860,6 +1885,7 @@ export function BookReaderModal({
                         pdfDoc={pdfDoc}
                         pageNumber={currentPage + 1}
                         targetWidth={bookSpreadPageWidth}
+                        scaleOverride={zoomScale > 0 ? zoomScale : undefined}
                         theme={theme}
                         allowDownload={allowDownload}
                         onTextSelected={(quote, p) => setSelectedQuote({ quote, page: p })}
@@ -1884,6 +1910,7 @@ export function BookReaderModal({
                     pdfDoc={pdfDoc}
                     pageNumber={currentPage}
                     targetWidth={bookSingleTargetWidth}
+                    scaleOverride={zoomScale > 0 ? zoomScale : undefined}
                     theme={theme}
                     allowDownload={allowDownload}
                     onTextSelected={(quote, p) => setSelectedQuote({ quote, page: p })}
@@ -2065,6 +2092,47 @@ export function BookReaderModal({
           </form>
         </footer>
       )}
+
+      {/* Floating Bottom-Right Fullscreen / Focus Reading Button & Zoom */}
+      <div className="fixed bottom-6 right-6 z-55 flex items-center gap-2">
+        {isFullscreen && (
+          <div className="flex items-center gap-1 bg-[#0B3321]/95 backdrop-blur text-white px-3.5 py-2.5 rounded-full shadow-2xl border border-white/20">
+            <button
+              type="button"
+              onClick={() => setZoomScale((z) => (z === 0 ? 0.9 : Math.max(0.6, Number((z - 0.15).toFixed(2)))))}
+              title="Reduzir Zoom (-)"
+              className="p-1 hover:bg-white/20 rounded-full transition-colors"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomScale(0)}
+              title="Ajustar Automático"
+              className="px-2 text-xs font-mono font-bold tracking-wider"
+            >
+              {zoomScale === 0 ? 'AUTO' : `${Math.round(zoomScale * 100)}%`}
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomScale((z) => (z === 0 ? 1.25 : Math.min(2.5, Number((z + 0.15).toFixed(2)))))}
+              title="Aumentar Zoom (+)"
+              className="p-1 hover:bg-white/20 rounded-full transition-colors"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => void toggleFullscreen()}
+          title={isFullscreen ? 'Sair da tela cheia' : 'Modo Tela Cheia (Leitura Imersiva)'}
+          className="shadow-2xl rounded-full bg-[#0B3321] text-white hover:bg-[#146C43] px-4 py-3.5 inline-flex items-center gap-2 text-xs font-bold transition-transform hover:scale-105 active:scale-95 border-2 border-white/30"
+        >
+          {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          <span>{isFullscreen ? 'Restaurar' : 'Tela Cheia'}</span>
+        </button>
+      </div>
     </div>
   );
 }

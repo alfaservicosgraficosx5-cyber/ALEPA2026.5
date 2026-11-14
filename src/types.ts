@@ -100,7 +100,8 @@ export type NavSection =
   | 'family'
   | 'settings'
   | 'teacher'
-  | 'admin';
+  | 'admin'
+  | 'portuguese_repo';
 
 export type BlockType = 'theory' | 'questions' | 'correction' | 'revision';
 
@@ -335,6 +336,18 @@ export interface ErrorEntry {
 
 export type StorageProviderType = 'firebase_storage' | 'google_drive' | 'local' | 'external';
 
+export interface PdfVirtualSection {
+  id: string;
+  disciplineId: string;
+  disciplineName: string;
+  title: string;
+  startPage: number;
+  endPage: number;
+  topics?: string[];
+  summary?: string;
+  publishedToLibrary?: boolean;
+}
+
 export interface StudyMaterial {
   id: string;
   ownerId: string;
@@ -376,6 +389,11 @@ export interface StudyMaterial {
   fileSizeBytes?: number;
   version?: number;
   versionNote?: string;
+  sections?: PdfVirtualSection[];
+  parentMaterialId?: string;
+  startPage?: number;
+  endPage?: number;
+  isVirtualSection?: boolean;
   createdAt?: unknown;
   updatedAt?: unknown;
 }

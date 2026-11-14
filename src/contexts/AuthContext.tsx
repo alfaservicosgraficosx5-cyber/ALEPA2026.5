@@ -83,6 +83,7 @@ import {
   StorageObjectCategory,
   StorageProviderType,
   StudentPreferences,
+  PdfVirtualSection,
   StudyMaterial,
   StudySession,
   SubmissionRevision,
@@ -290,6 +291,11 @@ interface AuthContextValue {
     fileSizeBytes?: number;
     version?: number;
     versionNote?: string;
+    sections?: StudyMaterial['sections'];
+    parentMaterialId?: string;
+    startPage?: number;
+    endPage?: number;
+    isVirtualSection?: boolean;
   }) => Promise<void>;
   updateMaterial: (
     materialId: string,
@@ -2611,6 +2617,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fileSizeBytes?: number;
     version?: number;
     versionNote?: string;
+    sections?: PdfVirtualSection[];
+    parentMaterialId?: string;
+    startPage?: number;
+    endPage?: number;
+    isVirtualSection?: boolean;
   }) => {
     const materialId = sanitizeId(`mat_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
     const todayIso = addDaysIso(0);
@@ -2643,6 +2654,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fileSizeBytes: input.fileSizeBytes,
         version: input.version ?? 1,
         versionNote: input.versionNote?.slice(0, 300),
+        sections: input.sections,
+        parentMaterialId: input.parentMaterialId,
+        startPage: input.startPage,
+        endPage: input.endPage,
+        isVirtualSection: input.isVirtualSection,
         isShared: false,
       };
       persistGuestPatch((prev) => ({
@@ -2693,6 +2709,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (input.storageProvider) payload.storageProvider = input.storageProvider;
       if (input.storagePath) payload.storagePath = input.storagePath.trim().slice(0, 500);
       if (input.reviewNotes) payload.reviewNotes = input.reviewNotes.trim().slice(0, 600);
+      if (input.sections?.length) payload.sections = input.sections;
+      if (input.parentMaterialId) payload.parentMaterialId = input.parentMaterialId;
+      if (input.startPage !== undefined) payload.startPage = input.startPage;
+      if (input.endPage !== undefined) payload.endPage = input.endPage;
+      if (input.isVirtualSection !== undefined) payload.isVirtualSection = Boolean(input.isVirtualSection);
       payload.publishedAt = (input.publishedAt || todayIso).slice(0, 20);
       payload.lastVerifiedAt = (input.lastVerifiedAt || todayIso).slice(0, 20);
       if (input.linkStatus) payload.linkStatus = input.linkStatus;

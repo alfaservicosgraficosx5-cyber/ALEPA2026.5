@@ -49,6 +49,7 @@ export interface PdfInspectionResult {
   metadataAuthor?: string;
   sampleSnippet?: string;
   outlineTitles?: string[];
+  outlineWithPages?: Array<{ title: string; page?: number }>;
   checksumSha256?: string;
 }
 
@@ -680,6 +681,21 @@ export async function inspectPdfMetadata(params: {
           .slice(0, 15)
       : undefined;
 
+    const outlineWithPages: Array<{ title: string; page?: number }> = [];
+    if (outline && outline.length > 0) {
+      const outlineNodes = await extractPdfOutline(pdfDoc);
+      const flattenNodes = (nodes: PdfOutlineNode[]) => {
+        for (const n of nodes) {
+          if (outlineWithPages.length >= 30) break;
+          if (n.title) {
+            outlineWithPages.push({ title: n.title, page: n.pageNumber ?? undefined });
+          }
+          if (n.children?.length) flattenNodes(n.children);
+        }
+      };
+      flattenNodes(outlineNodes);
+    }
+
     return {
       pageCount,
       fileSizeBytes: source.fileSizeBytes,
@@ -690,6 +706,7 @@ export async function inspectPdfMetadata(params: {
       metadataAuthor,
       sampleSnippet: snippetParts.join('\n\n').slice(0, 2200) || undefined,
       outlineTitles: outlineTitles?.length ? outlineTitles : undefined,
+      outlineWithPages: outlineWithPages.length ? outlineWithPages : undefined,
       checksumSha256,
     };
   } finally {

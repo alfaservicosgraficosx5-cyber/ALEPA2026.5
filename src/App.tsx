@@ -89,6 +89,9 @@ const TeacherConsoleView = lazy(() =>
 const AdminConsoleView = lazy(() =>
   import('./components/AdminConsoleView').then((m) => ({ default: m.AdminConsoleView }))
 );
+const PortugueseRepositoryView = lazy(() =>
+  import('./components/PortugueseRepositoryView').then((m) => ({ default: m.PortugueseRepositoryView }))
+);
 
 function RouteLoadingFallback() {
   return (
@@ -116,6 +119,7 @@ const SIDEBAR_GROUPS: SidebarNavGroup[] = [
       { id: 'classroom', label: 'Minhas Turmas & Aulas', icon: GraduationCap },
       { id: 'preparation', label: 'Minha Preparação', icon: Compass },
       { id: 'disciplines', label: 'Disciplinas e Edital', icon: BookOpen },
+      { id: 'portuguese_repo', label: 'Português (Prof. Fabrício)', icon: BookOpen },
       { id: 'study_room', label: 'Sala de Estudo', icon: BookMarked },
       { id: 'materials', label: 'Central de Estudos', icon: FileText },
       { id: 'videos', label: 'Videoaulas', icon: Video },
@@ -407,35 +411,37 @@ function CampusShell() {
       ? 'Painel Administrativo'
       : activeTab === 'teacher'
         ? 'Console do Professor'
-        : activeTab === 'classroom'
-          ? 'Minhas Turmas & Aulas'
-          : activeTab === 'preparation'
-            ? 'Minha Preparação'
-            : activeTab === 'study_room'
-              ? 'Sala de Estudo'
-              : activeTab === 'disciplines'
-                ? 'Disciplinas & Edital'
-                : activeTab === 'schedule'
-                  ? 'Cronograma 2h'
-                  : activeTab === 'simulados'
-                    ? 'Simulados e Questões'
-                    : activeTab === 'revisions'
-                      ? 'Revisões / Erros'
-                      : activeTab === 'podcasts'
-                        ? 'Podcasts & Spotify'
-                        : activeTab === 'videos'
-                          ? 'Videoaulas'
-                          : activeTab === 'gemini'
-                            ? 'Professor IA & Resumos'
-                            : activeTab === 'materials'
-                              ? 'Central de Estudos'
-                              : activeTab === 'performance'
-                                ? 'Desempenho'
-                                : activeTab === 'family'
-                                  ? 'Familiares'
-                                  : activeTab === 'settings'
-                                    ? 'Configurações'
-                                    : 'Painel Inicial';
+        : activeTab === 'portuguese_repo'
+          ? 'Repositório de Português (Prof. Fabrício)'
+          : activeTab === 'classroom'
+            ? 'Minhas Turmas & Aulas'
+            : activeTab === 'preparation'
+              ? 'Minha Preparação'
+              : activeTab === 'study_room'
+                ? 'Sala de Estudo'
+                : activeTab === 'disciplines'
+                  ? 'Disciplinas & Edital'
+                  : activeTab === 'schedule'
+                    ? 'Cronograma 2h'
+                    : activeTab === 'simulados'
+                      ? 'Simulados e Questões'
+                      : activeTab === 'revisions'
+                        ? 'Revisões / Erros'
+                        : activeTab === 'podcasts'
+                          ? 'Podcasts & Spotify'
+                          : activeTab === 'videos'
+                            ? 'Videoaulas'
+                            : activeTab === 'gemini'
+                              ? 'Professor IA & Resumos'
+                              : activeTab === 'materials'
+                                ? 'Central de Estudos'
+                                : activeTab === 'performance'
+                                  ? 'Desempenho'
+                                  : activeTab === 'family'
+                                    ? 'Familiares'
+                                    : activeTab === 'settings'
+                                      ? 'Configurações'
+                                      : 'Painel Inicial';
 
   const handleStartFocusTimer = (disciplineId: string, topicTitle: string) => {
     setTimerPreset({ disciplineId, topicTitle });
@@ -885,6 +891,22 @@ function CampusShell() {
                 onChangeMedioCargoGroup={handleChangeMedioCargo}
                 onNavigate={navigateTo}
                 onOpenStudyRoom={handleOpenStudyRoom}
+              />
+            )}
+            {activeTab === 'portuguese_repo' && (
+              <PortugueseRepositoryView
+                campus={selectedCampus}
+                onNavigate={navigateTo}
+                onSummarizeWithGemini={(target) => {
+                  setGeminiPreset({
+                    mode: target.mode === 'topic' ? 'professor' : 'pdf',
+                    materialId: target.materialId,
+                    url: target.url,
+                    title: target.title,
+                    disciplineId: target.disciplineId,
+                  });
+                  navigateTo('gemini');
+                }}
               />
             )}
             {activeTab === 'disciplines' && (
