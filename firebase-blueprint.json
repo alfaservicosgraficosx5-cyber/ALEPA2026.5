@@ -100,6 +100,7 @@
       "properties": {
         "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "subtitle": { "type": "string", "maxLength": 300 },
         "disciplineId": { "type": "string", "maxLength": 80 },
         "libraryCategoryId": { "type": "string", "maxLength": 80 },
         "editalTopic": { "type": "string", "maxLength": 240 },
@@ -127,7 +128,7 @@
         "storageProvider": { "type": "string", "enum": ["firebase_storage", "google_drive", "local", "external"] },
         "storagePath": { "type": "string", "maxLength": 500 },
         "fileName": { "type": "string", "maxLength": 240 },
-        "description": { "type": "string", "maxLength": 1000 },
+        "description": { "type": "string", "maxLength": 2000 },
         "isShared": { "type": "boolean" },
         "allowDownload": { "type": "boolean" },
         "textLayerStatus": { "type": "string", "enum": ["selectable", "scanned", "mixed", "unknown"] },
@@ -135,6 +136,15 @@
         "fileSizeBytes": { "type": "integer" },
         "version": { "type": "integer" },
         "versionNote": { "type": "string", "maxLength": 300 },
+        "chapters": { "type": "array" },
+        "studyRecommendations": { "type": "array" },
+        "sections": { "type": "array" },
+        "parentMaterialId": { "type": "string", "maxLength": 128 },
+        "startPage": { "type": "integer" },
+        "endPage": { "type": "integer" },
+        "isVirtualSection": { "type": "boolean" },
+        "organizedBy": { "type": "string", "maxLength": 128 },
+        "organizedAt": { "type": "string", "maxLength": 40 },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -505,6 +515,73 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["logId", "actorId", "actorRole", "action", "targetCollection", "targetId", "summary", "createdAt"]
+    },
+    "MediaProgress": {
+      "title": "MediaProgress",
+      "description": "Progresso real de reprodução de vídeo e podcast no player interno ou abertura externa registrada por usuário",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "mediaId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "materialTitle": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "mediaType": { "type": "string", "enum": ["video", "audio"] },
+        "currentTimeSeconds": { "type": "number" },
+        "durationSeconds": { "type": "number" },
+        "progressPercent": { "type": "integer" },
+        "playbackRate": { "type": "number" },
+        "preferredMode": { "type": "string", "enum": ["ask", "internal", "external"] },
+        "lastChapterId": { "type": "string", "maxLength": 128 },
+        "openedExternallyAt": { "type": "string", "maxLength": 40 },
+        "lastPlayedAt": { "type": "string", "maxLength": 40 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "mediaId", "materialTitle", "mediaType", "currentTimeSeconds", "durationSeconds", "progressPercent", "playbackRate", "preferredMode", "lastPlayedAt", "updatedAt"]
+    },
+    "AcademicRequest": {
+      "title": "AcademicRequest",
+      "description": "Chamado e atendimento humano entre Estudante, Professor e Administrador",
+      "type": "object",
+      "properties": {
+        "requestId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "studentEmail": { "type": "string", "maxLength": 160 },
+        "category": { "type": "string", "enum": ["duvida_academica", "pedido_material", "pedido_video_podcast", "erro_conteudo", "sugestao", "suporte"] },
+        "subject": { "type": "string", "minLength": 2, "maxLength": 200 },
+        "description": { "type": "string", "minLength": 3, "maxLength": 4000 },
+        "disciplineId": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "topicTitle": { "type": "string", "maxLength": 240 },
+        "campusLevel": { "type": "string", "enum": ["geral", "superior", "medio"] },
+        "status": { "type": "string", "enum": ["pendente", "em_analise", "aguardando_resposta", "respondida", "concluida"] },
+        "assignedTeacherId": { "type": "string", "maxLength": 128 },
+        "assignedTeacherName": { "type": "string", "maxLength": 120 },
+        "assignedRole": { "type": "string", "enum": ["teacher", "editor", "admin"] },
+        "forwardedBy": { "type": "string", "maxLength": 128 },
+        "lastMessagePreview": { "type": "string", "maxLength": 300 },
+        "lastMessageByRole": { "type": "string", "enum": ["student", "teacher", "editor", "admin", "dev"] },
+        "messageCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["requestId", "studentId", "studentName", "category", "subject", "description", "disciplineId", "status", "messageCount", "createdAt", "updatedAt"]
+    },
+    "AcademicRequestMessage": {
+      "title": "AcademicRequestMessage",
+      "description": "Mensagem humana persistida no chat de uma solicitação acadêmica",
+      "type": "object",
+      "properties": {
+        "messageId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "requestId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "assignedTeacherId": { "type": "string", "maxLength": 128 },
+        "senderId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "senderRole": { "type": "string", "enum": ["student", "teacher", "editor", "admin", "dev"] },
+        "body": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "isSystemNote": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["messageId", "requestId", "studentId", "senderId", "senderName", "senderRole", "body", "createdAt"]
     }
   },
   "firestore": {
@@ -535,6 +612,10 @@
     "/users/{userId}/readingProgress/{materialId}": {
       "schema": { "$ref": "#/entities/ReadingProgress" },
       "description": "Progresso de leitura, marcadores, destaques e anotações do Book Reader por estudante"
+    },
+    "/users/{userId}/mediaProgress/{mediaId}": {
+      "schema": { "$ref": "#/entities/MediaProgress" },
+      "description": "Progresso de vídeo e podcast e preferência de reprodução por estudante"
     },
     "/materials/{materialId}": {
       "schema": { "$ref": "#/entities/StudyMaterial" },
@@ -599,6 +680,14 @@
     "/auditLogs/{logId}": {
       "schema": { "$ref": "#/entities/AuditLogEntry" },
       "description": "Logs imutáveis de auditoria de governança"
+    },
+    "/academicRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/AcademicRequest" },
+      "description": "Central de solicitações acadêmicas entre Estudante, Professor e Administrador"
+    },
+    "/academicRequests/{requestId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/AcademicRequestMessage" },
+      "description": "Mensagens humanas registradas em cada solicitação acadêmica"
     }
   }
 }

@@ -2235,27 +2235,39 @@ Regras obrigatórias:
               '- ID "cat_02_legislacao_etica": Legislação do Estado do Pará e Ética',
             ].join('\n');
 
+        const hasPageNumbers =
+          Array.isArray(body.outlineWithPages) &&
+          body.outlineWithPages.some((o) => typeof o.page === 'number' && o.page >= 1);
+
         const outlineList = Array.isArray(body.outlineWithPages) && body.outlineWithPages.length > 0
           ? body.outlineWithPages.map((o) => `* ${o.title} (página ${o.page || 'não indicada'})`).join('\n')
           : Array.isArray(body.outlineTitles) && body.outlineTitles.length > 0
             ? body.outlineTitles.map((t) => `* ${t}`).join('\n')
-            : 'Nenhum sumário embutido; deduza e organize proporcionalmente as matérias típicas do cargo da ALEPA 2026.';
+            : '';
+
+        if (!outlineList && !body.sampleSnippet) {
+          res.status(400).json({
+            error:
+              'Forneça o sumário embutido ou uma amostra textual do PDF para que a IA sugira a divisão sem inventar números de página.',
+          });
+          return;
+        }
 
         const prompt = [
           'Você é o arquiteto pedagógico do MEU CAMPUS ALEPA 2026.',
-          'Sua missão é realizar a SEPARAÇÃO VIRTUAL de um material geral/apostila em seções organizadas por disciplina do Edital da ALEPA 2026.',
+          'Sua missão é sugerir a organização de um material em seções por disciplina do Edital da ALEPA 2026.',
           `Título do Material: ${title || body.fileName || 'Apostila Geral ALEPA 2026'}`,
           `Total de Páginas do PDF: ${pageCount}`,
           `Nível do Concurso: ${body.campusLevel || 'superior'}`,
           `Disciplinas disponíveis no sistema:\n${disciplinesList}`,
-          `Sumário / Tópicos identificados no documento:\n${outlineList}`,
-          body.sampleSnippet ? `Amostra de texto:\n${body.sampleSnippet.slice(0, 2000)}` : '',
-          'Instruções para a divisão virtual:',
-          '1. Divida o total de páginas de forma contínua e lógica entre as disciplinas pertinentes presentes na apostila.',
-          '2. Para cada disciplina identificada, defina o intervalo exato de páginas (startPage e endPage), onde 1 <= startPage <= endPage <= total de páginas.',
-          '3. O startPage da primeira seção deve ser 1, e o endPage da última seção deve cobrir até o total de páginas.',
-          '4. Associe o disciplineId correspondente da lista de disciplinas.',
-          '5. Sugira um título claro (ex: "Língua Portuguesa — Teoria e Exercícios"), resumo breve e tópicos do edital.',
+          outlineList ? `Sumário / Tópicos identificados no documento:\n${outlineList}` : 'Sumário embutido ausente.',
+          body.sampleSnippet ? `Amostra de texto:\n${body.sampleSnippet.slice(0, 2500)}` : '',
+          'Regras estritas de integridade:',
+          hasPageNumbers
+            ? '1. Use exclusivamente as páginas reais indicadas no sumário extraído (1 <= startPage <= endPage <= total de páginas). Não invente capítulos ausentes.'
+            : '1. Como o documento não informou páginas numéricas no sumário, NÃO invente intervalos falsos de página: defina startPage=1 e endPage=1 para que o curador confirme as páginas antes de publicar.',
+          '2. Associe o disciplineId correspondente da lista de disciplinas.',
+          '3. Sugira um título claro, resumo objetivo e tópicos do edital efetivamente presentes nas evidências fornecidas.',
           'Retorne JSON estrito com array "sections".',
         ].filter(Boolean).join('\n\n');
 
@@ -2263,7 +2275,8 @@ Regras obrigatórias:
           model: GEMINI_MODEL,
           contents: prompt,
           config: {
-            systemInstruction: 'Retorne JSON estruturado com a divisão virtual de disciplinas e páginas.',
+            systemInstruction:
+              'Retorne JSON estruturado com seções baseadas apenas nas evidências enviadas. Nunca invente páginas ou conteúdo inexistente.',
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
@@ -2304,21 +2317,185 @@ Regras obrigatórias:
           }>;
         };
 
-        const validatedSections = (parsed.sections || []).map((sec, idx) => ({
-          id: sec.id || `sec_${idx + 1}`,
-          disciplineId: sec.disciplineId || 'cat_01_portugues',
-          disciplineName: sec.disciplineName || 'Disciplina',
-          title: sec.title || `Seção ${idx + 1}`,
-          startPage: Math.max(1, Math.min(pageCount, Number(sec.startPage) || 1)),
-          endPage: Math.max(1, Math.min(pageCount, Number(sec.endPage) || pageCount)),
-          summary: sec.summary || '',
-          topics: Array.isArray(sec.topics) ? sec.topics.slice(0, 10) : [],
-          publishedToLibrary: true,
-        }));
+        const validatedSections = (parsed.sections || []).map((sec, idx) => {
+          const sp = hasPageNumbers ? Math.max(1, Math.min(pageCount, Number(sec.startPage) || 1)) : 1;
+          const ep = hasPageNumbers ? Math.max(sp, Math.min(pageCount, Number(sec.endPage) || sp)) : 1;
+          return {
+            id: sec.id || `sec_${idx + 1}`,
+            disciplineId: sec.disciplineId || 'cat_01_portugues',
+            disciplineName: sec.disciplineName || 'Disciplina',
+            title: sec.title || `Seção ${idx + 1}`,
+            startPage: sp,
+            endPage: ep,
+            summary: sec.summary || '',
+            topics: Array.isArray(sec.topics) ? sec.topics.slice(0, 10) : [],
+            publishedToLibrary: hasPageNumbers,
+            requiresPageVerification: !hasPageNumbers,
+          };
+        });
 
         res.json({
           sections: validatedSections,
           totalSections: validatedSections.length,
+          hasVerifiedPageNumbers: hasPageNumbers,
+          model: GEMINI_MODEL,
+        });
+      } catch (err) {
+        const mapped = formatGeminiError(err);
+        res.status(mapped.status).json({ error: mapped.message });
+      }
+    }
+  );
+
+  app.post('/api/ai/organize-material', geminiRateLimiter);
+  app.post(
+    '/api/ai/organize-material',
+    requireRole(['admin', 'editor', 'teacher', 'dev']),
+    async (req: Request, res: Response) => {
+      try {
+        const body = (req.body || {}) as {
+          title?: string;
+          fileName?: string;
+          resourceType?: string;
+          campusLevel?: 'geral' | 'superior' | 'medio';
+          editalTopic?: string;
+          description?: string;
+          pageCount?: number;
+          durationSeconds?: number;
+          outlineWithPages?: Array<{ title: string; page?: number }>;
+          outlineTitles?: string[];
+          transcriptOrNotes?: string;
+          availableDisciplines?: Array<{ id: string; name: string }>;
+        };
+
+        const title = (body.title || '').trim().slice(0, 220);
+        const fileName = (body.fileName || '').trim().slice(0, 220);
+        const transcriptOrNotes = (body.transcriptOrNotes || '').trim().slice(0, 4000);
+        if (!title && !fileName && !transcriptOrNotes) {
+          res.status(400).json({ error: 'Informe título, arquivo ou texto de apoio para organizar o conteúdo.' });
+          return;
+        }
+
+        const ai = getGeminiClient();
+        const discText = Array.isArray(body.availableDisciplines) && body.availableDisciplines.length > 0
+          ? body.availableDisciplines.map((d) => `- "${d.id}": ${d.name}`).join('\n')
+          : 'Mantenha o disciplineId compatível com o edital ALEPA 2026.';
+
+        const outlineText = Array.isArray(body.outlineWithPages) && body.outlineWithPages.length > 0
+          ? body.outlineWithPages.map((o) => `* ${o.title}${o.page ? ` (pág. ${o.page})` : ''}`).join('\n')
+          : Array.isArray(body.outlineTitles) && body.outlineTitles.length > 0
+            ? body.outlineTitles.map((t) => `* ${t}`).join('\n')
+            : '';
+
+        const prompt = [
+          'Você é um curador pedagógico do MEU CAMPUS ALEPA 2026 (Banca CETAP).',
+          'Organize os metadados deste conteúdo para revisão humana (editor/professor).',
+          `Título atual: ${title || '(sem título)'}`,
+          fileName ? `Arquivo: ${fileName}` : '',
+          body.resourceType ? `Tipo: ${body.resourceType}` : '',
+          `Campus: ${body.campusLevel || 'superior'}`,
+          body.editalTopic ? `Tópico atual: ${body.editalTopic}` : '',
+          body.description ? `Descrição atual: ${body.description}` : '',
+          body.pageCount ? `Total de páginas: ${body.pageCount}` : '',
+          body.durationSeconds ? `Duração (seg): ${body.durationSeconds}` : '',
+          `Disciplinas disponíveis:\n${discText}`,
+          outlineText ? `Sumário extraído:\n${outlineText}` : '',
+          transcriptOrNotes ? `Notas / Trecho / Marcações fornecidas:\n${transcriptOrNotes}` : '',
+          'Regras:',
+          '- Sugira subtitle (subtítulo curto), description (resumo didático de 2-3 linhas), disciplineId, editalTopic, keywords (máx 8), studyRecommendations (3 a 5 passos práticos de estudo) e chapters.',
+          '- NUNCA invente números de página ou timestamps (startPage, endPage, startSeconds) se eles NÃO estiverem presentes no sumário ou nas marcações fornecidas; se não houver base numérica, omita startPage/startSeconds.',
+          '- Retorne JSON estrito.',
+        ].filter(Boolean).join('\n\n');
+
+        const response = await ai.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: prompt,
+          config: {
+            systemInstruction:
+              'Curador pedagógico ALEPA 2026. Retorne JSON válido e jamais invente páginas, leis ou tempos inexistentes.',
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                subtitle: { type: Type.STRING },
+                description: { type: Type.STRING },
+                disciplineId: { type: Type.STRING },
+                editalTopic: { type: Type.STRING },
+                keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+                studyRecommendations: { type: Type.ARRAY, items: { type: Type.STRING } },
+                chapters: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      title: { type: Type.STRING },
+                      summary: { type: Type.STRING },
+                      startPage: { type: Type.INTEGER },
+                      endPage: { type: Type.INTEGER },
+                      startSeconds: { type: Type.INTEGER },
+                      endSeconds: { type: Type.INTEGER },
+                    },
+                    required: ['title'],
+                  },
+                },
+              },
+              required: ['subtitle', 'description', 'editalTopic', 'keywords', 'studyRecommendations', 'chapters'],
+            },
+          },
+        });
+
+        const parsed = JSON.parse(response.text || '{}') as {
+          subtitle?: string;
+          description?: string;
+          disciplineId?: string;
+          editalTopic?: string;
+          keywords?: string[];
+          studyRecommendations?: string[];
+          chapters?: Array<{
+            title?: string;
+            summary?: string;
+            startPage?: number;
+            endPage?: number;
+            startSeconds?: number;
+            endSeconds?: number;
+          }>;
+        };
+
+        const chapters = Array.isArray(parsed.chapters)
+          ? parsed.chapters.slice(0, 25).map((ch, idx) => ({
+              id: `ch_ai_${Date.now()}_${idx}`,
+              title: String(ch.title || `Capítulo ${idx + 1}`).slice(0, 140),
+              summary: ch.summary ? String(ch.summary).slice(0, 320) : undefined,
+              startPage:
+                typeof ch.startPage === 'number' && ch.startPage >= 1
+                  ? Math.min(body.pageCount || 2500, Math.round(ch.startPage))
+                  : undefined,
+              endPage:
+                typeof ch.endPage === 'number' && ch.endPage >= 1
+                  ? Math.min(body.pageCount || 2500, Math.round(ch.endPage))
+                  : undefined,
+              startSeconds:
+                typeof ch.startSeconds === 'number' && ch.startSeconds >= 0 ? Math.round(ch.startSeconds) : undefined,
+              endSeconds:
+                typeof ch.endSeconds === 'number' && ch.endSeconds >= 0 ? Math.round(ch.endSeconds) : undefined,
+            }))
+          : [];
+
+        res.json({
+          suggestion: {
+            subtitle: String(parsed.subtitle || '').slice(0, 200),
+            description: String(parsed.description || '').slice(0, 1200),
+            disciplineId: parsed.disciplineId ? String(parsed.disciplineId).slice(0, 80) : undefined,
+            editalTopic: String(parsed.editalTopic || '').slice(0, 220),
+            keywords: Array.isArray(parsed.keywords)
+              ? parsed.keywords.slice(0, 8).map((k) => String(k).trim()).filter(Boolean)
+              : [],
+            studyRecommendations: Array.isArray(parsed.studyRecommendations)
+              ? parsed.studyRecommendations.slice(0, 5).map((r) => String(r).trim()).filter(Boolean)
+              : [],
+            chapters,
+          },
+          requiresHumanReview: true,
           model: GEMINI_MODEL,
         });
       } catch (err) {
@@ -2659,8 +2836,31 @@ Regras obrigatórias:
       server: {
         middlewareMode: true,
         hmr: false,
+        ws: false,
       },
       appType: 'spa',
+      plugins: [
+        {
+          name: 'disable-hmr-client-ws',
+          enforce: 'post',
+          transform(code, id) {
+            if (id.includes('vite/dist/client/client.mjs')) {
+              const transportBlockPattern =
+                /const transport = normalizeModuleRunnerTransport\(\(\(\) => \{[\s\S]*?\}\)\(\)\);/;
+              if (transportBlockPattern.test(code)) {
+                return {
+                  code: code.replace(
+                    transportBlockPattern,
+                    'const transport = normalizeModuleRunnerTransport({ async connect() {}, async disconnect() {}, async send() {} });'
+                  ),
+                  map: null,
+                };
+              }
+            }
+            return null;
+          },
+        },
+      ],
     });
     app.use(vite.middlewares);
   }

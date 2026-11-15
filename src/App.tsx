@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   BarChart3,
@@ -18,10 +18,13 @@ import {
   LogIn,
   LogOut,
   Menu,
+  MessageSquare,
+  Moon,
   RotateCcw,
   Settings,
   ShieldCheck,
   Sparkles,
+  Sun,
   UserCheck,
   Users,
   Video,
@@ -88,6 +91,9 @@ const AdminConsoleView = lazy(() =>
 const PortugueseRepositoryView = lazy(() =>
   import('./components/PortugueseRepositoryView').then((m) => ({ default: m.PortugueseRepositoryView }))
 );
+const RequestsCenterView = lazy(() =>
+  import('./components/RequestsCenterView').then((m) => ({ default: m.RequestsCenterView }))
+);
 
 function RouteLoadingFallback() {
   return (
@@ -127,6 +133,7 @@ const SIDEBAR_GROUPS: SidebarNavGroup[] = [
       { id: 'schedule', label: 'Cronograma 2h', icon: CalendarDays },
       { id: 'revisions', label: 'Revisões & Erros', icon: RotateCcw },
       { id: 'gemini', label: 'Professor IA', icon: Sparkles },
+      { id: 'requests', label: 'Solicitações', icon: MessageSquare },
     ],
   },
   {
@@ -207,6 +214,53 @@ function CampusShell() {
   const [studyRoomTarget, setStudyRoomTarget] = useState<{ disciplineId?: string; topicId?: string }>({});
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const lastScrollYRef = useRef(0);
+
+  // Sync preferred campus & medioCargoGroup from saved account preferences when loaded
+  useEffect(() => {
+    if (preferences.preferredCampus && (preferences.preferredCampus === 'medio' || preferences.preferredCampus === 'superior')) {
+      setSelectedCampus(preferences.preferredCampus);
+      try {
+        localStorage.setItem('concurso_alepa_campus', preferences.preferredCampus);
+      } catch {
+        // ignore storage errors
+      }
+    }
+  }, [preferences.preferredCampus]);
+
+  useEffect(() => {
+    if (preferences.preferredMedioCargo) {
+      setSelectedMedioCargo(preferences.preferredMedioCargo);
+      try {
+        localStorage.setItem('concurso_alepa_medio_cargo', preferences.preferredMedioCargo);
+      } catch {
+        // ignore storage errors
+      }
+    }
+  }, [preferences.preferredMedioCargo]);
+
+  // Auto-hide header on downward scroll & reveal on upward scroll
+  useEffect(() => {
+    const onScroll = () => {
+      if (mobileMenuOpen) {
+        setHeaderHidden(false);
+        return;
+      }
+      const currentY = window.scrollY || 0;
+      const delta = currentY - lastScrollYRef.current;
+      if (currentY < 48) {
+        setHeaderHidden(false);
+      } else if (delta > 8 && currentY > 96) {
+        setHeaderHidden(true);
+      } else if (delta < -8) {
+        setHeaderHidden(false);
+      }
+      lastScrollYRef.current = currentY;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     updateAccessPresenceContext(activeTab, selectedCampus);
@@ -324,71 +378,40 @@ function CampusShell() {
     activeTab !== 'videos' &&
     activeTab !== 'podcasts';
 
-  const mobileSheetItems: Array<{
-    id: NavSection;
-    label: string;
-    subtitle: string;
-    icon: React.ComponentType<{ className?: string }>;
+  const mobileSheetGroups: Array<{
+    groupLabel: string;
+    items: Array<{
+      id: NavSection;
+      label: string;
+      subtitle: string;
+      icon: React.ComponentType<{ className?: string }>;
+    }>;
   }> = [
     {
-      id: 'performance',
-      label: 'Desempenho',
-      subtitle: 'Evolução e progresso',
-      icon: BarChart3,
+      groupLabel: 'Principais recursos',
+      items: [
+        { id: 'materials', label: 'Central de Materiais', subtitle: 'PDFs, apostilas e Drive', icon: FileText },
+        { id: 'portuguese_repo', label: 'Português (Prof. Fabrício)', subtitle: 'Aulas e textos exclusivos', icon: BookMarked },
+        { id: 'classroom', label: 'Minhas Turmas', subtitle: 'Aulas, atividades e notas', icon: GraduationCap },
+        { id: 'schedule', label: 'Cronograma 2h', subtitle: 'Blocos diários e timer', icon: CalendarDays },
+        { id: 'revisions', label: 'Revisões / Erros', subtitle: 'Caderno espaçado', icon: RotateCcw },
+        { id: 'gemini', label: 'Professor IA', subtitle: 'Resumos, cards e plano', icon: Sparkles },
+      ],
     },
     {
-      id: 'materials',
-      label: 'Central de Materiais',
-      subtitle: 'PDFs, apostilas e Drive',
-      icon: FileText,
+      groupLabel: 'Minha preparação',
+      items: [
+        { id: 'preparation', label: 'Minha Preparação', subtitle: 'Rota de estudos e edital', icon: Compass },
+        { id: 'performance', label: 'Desempenho', subtitle: 'Evolução e progresso', icon: BarChart3 },
+        { id: 'requests', label: 'Solicitações', subtitle: 'Pedidos ao prof. e coord.', icon: MessageSquare },
+        { id: 'family', label: 'Familiares', subtitle: 'Acesso compartilhado', icon: Users },
+      ],
     },
     {
-      id: 'schedule',
-      label: 'Cronograma 2h',
-      subtitle: 'Blocos diários e timer',
-      icon: CalendarDays,
-    },
-    {
-      id: 'revisions',
-      label: 'Revisões / Erros',
-      subtitle: 'Caderno espaçado',
-      icon: RotateCcw,
-    },
-    {
-      id: 'classroom',
-      label: 'Minhas Turmas',
-      subtitle: 'Aulas, atividades e notas',
-      icon: GraduationCap,
-    },
-    {
-      id: 'preparation',
-      label: 'Minha Preparação',
-      subtitle: 'Rota de estudos e edital',
-      icon: Compass,
-    },
-    {
-      id: 'portuguese_repo',
-      label: 'Português (Prof. Fabrício)',
-      subtitle: 'Aulas e textos exclusivos',
-      icon: BookMarked,
-    },
-    {
-      id: 'gemini',
-      label: 'Professor IA',
-      subtitle: 'Resumos, cards e plano',
-      icon: Sparkles,
-    },
-    {
-      id: 'family',
-      label: 'Familiares',
-      subtitle: 'Acesso compartilhado',
-      icon: Users,
-    },
-    {
-      id: 'settings',
-      label: 'Configurações',
-      subtitle: 'Meta, cargo e conta',
-      icon: Settings,
+      groupLabel: 'Gestão e configurações',
+      items: [
+        { id: 'settings', label: 'Configurações', subtitle: 'Meta, cargo e conta', icon: Settings },
+      ],
     },
   ];
 
@@ -417,15 +440,17 @@ function CampusShell() {
                           ? 'Vídeos e Podcasts'
                           : activeTab === 'gemini'
                             ? 'Professor IA & Resumos'
-                            : activeTab === 'materials'
-                              ? 'Central de Materiais'
-                              : activeTab === 'performance'
-                                ? 'Desempenho'
-                                : activeTab === 'family'
-                                  ? 'Familiares'
-                                  : activeTab === 'settings'
-                                    ? 'Configurações'
-                                    : 'Início';
+                            : activeTab === 'requests'
+                              ? 'Solicitações Acadêmicas'
+                              : activeTab === 'materials'
+                                ? 'Central de Materiais'
+                                : activeTab === 'performance'
+                                  ? 'Desempenho'
+                                  : activeTab === 'family'
+                                    ? 'Familiares'
+                                    : activeTab === 'settings'
+                                      ? 'Configurações'
+                                      : 'Início';
 
   const handleStartFocusTimer = (disciplineId: string, topicTitle: string) => {
     setTimerPreset({ disciplineId, topicTitle });
@@ -631,84 +656,66 @@ function CampusShell() {
 
       {/* Main Column */}
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* Top Bar (Compact on Mobile/Tablet, Slim Utility Bar on Desktop) */}
-        <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
-          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
-            <div className="flex items-center gap-2 min-w-0">
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen(true)}
-                aria-label="Abrir menu completo"
-                className="lg:hidden min-w-[40px] min-h-[40px] -ml-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center shrink-0"
-              >
-                <Menu className="w-5 h-5" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigateTo('dashboard')}
-                className="font-display text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap truncate text-left flex items-center gap-2 min-h-[40px]"
-              >
-                <span className="lg:hidden">ALEPA 2026</span>
-                <span className="hidden lg:inline text-slate-500 dark:text-slate-400 font-medium text-xs">
-                  Meu Campus ALEPA /{' '}
-                  <strong className="text-slate-900 dark:text-slate-100 font-semibold">{activeSectionLabel}</strong>
+        {/* Auto-hiding Slim Top Bar (Mobile: brand + campus + account/login; Desktop: breadcrumb + campus) */}
+        <header
+          className={`sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-transform duration-200 will-change-transform ${
+            headerHidden ? '-translate-y-full focus-within:translate-y-0' : 'translate-y-0'
+          }`}
+        >
+          <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 h-12 sm:h-14 flex items-center justify-between gap-2 sm:gap-4">
+            <button
+              type="button"
+              onClick={() => navigateTo('dashboard')}
+              className="font-display text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap truncate text-left flex items-center gap-2 min-h-[44px]"
+            >
+              <span className="lg:hidden inline-flex items-center gap-1.5">
+                <span>Meu Campus ALEPA</span>
+                <span className="text-[11px] font-mono font-semibold text-[#146C43] dark:text-emerald-400">
+                  · {selectedCampus === 'medio' ? 'Médio' : 'Superior'}
                 </span>
-              </button>
-            </div>
+              </span>
+              <span className="hidden lg:inline text-slate-500 dark:text-slate-400 font-medium text-xs">
+                Meu Campus ALEPA /{' '}
+                <strong className="text-slate-900 dark:text-slate-100 font-semibold">{activeSectionLabel}</strong>
+              </span>
+            </button>
 
-            {/* Campus Quick Switcher on Desktop Top Bar */}
-            <div className="hidden md:flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl shrink-0">
-              <button
-                type="button"
-                onClick={() => handleChangeCampus('superior')}
-                className={`min-h-[34px] px-3 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
-                  selectedCampus === 'superior'
-                    ? 'bg-[#0B3321] text-white'
-                    : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                Superior · PL.AL.102
-              </button>
-              <button
-                type="button"
-                onClick={() => handleChangeCampus('medio')}
-                className={`min-h-[34px] px-3 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
-                  selectedCampus === 'medio'
-                    ? 'bg-[#0B3321] text-white'
-                    : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                Médio · PL.AL.060
-              </button>
-            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Campus Quick Switcher on Desktop Top Bar */}
+              <div className="hidden md:flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleChangeCampus('superior')}
+                  className={`min-h-[32px] px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
+                    selectedCampus === 'superior'
+                      ? 'bg-[#0B3321] text-white'
+                      : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  Superior · PL.AL.102
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChangeCampus('medio')}
+                  className={`min-h-[32px] px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
+                    selectedCampus === 'medio'
+                      ? 'bg-[#0B3321] text-white'
+                      : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  Médio · PL.AL.060
+                </button>
+              </div>
 
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() =>
-                  void updateStudentPreferences({
-                    theme: preferences.theme === 'dark' ? 'light' : 'dark',
-                  })
-                }
-                aria-label="Alternar tema claro/escuro"
-                title={preferences.theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
-                className="min-w-[38px] min-h-[38px] px-2.5 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-[#146C43]"
-              >
-                {preferences.theme === 'dark' ? 'Claro' : 'Escuro'}
-              </button>
-              <ShareAppButton variant="header" />
-              <PWAInstallButton variant="header" />
               {isGuest && !user ? (
                 <button
                   type="button"
                   onClick={exitGuestMode}
                   title="Fazer Login para sincronizar seus estudos na nuvem"
-                  className="min-h-[38px] px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold text-white bg-[#0B3321] hover:bg-[#134b32] rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                  className="min-h-[38px] px-3 py-1.5 text-xs font-semibold text-white bg-[#0B3321] hover:bg-[#134b32] rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
                 >
                   <LogIn className="w-3.5 h-3.5 shrink-0" />
-                  <span className="sm:hidden">Login</span>
-                  <span className="hidden sm:inline">Fazer Login</span>
+                  <span>Login</span>
                 </button>
               ) : (
                 <button
@@ -718,7 +725,7 @@ function CampusShell() {
                   className="min-h-[38px] px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-[#0B3321] dark:text-emerald-200 bg-[#E8F3EC] dark:bg-emerald-950/60 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800 rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
                 >
                   <UserCheck className="w-3.5 h-3.5 shrink-0 text-[#146C43] dark:text-emerald-400" />
-                  <span className="hidden sm:inline max-w-[110px] truncate">
+                  <span className="max-w-[100px] truncate">
                     {profile?.displayName?.split(' ')[0] || 'Conta'}
                   </span>
                 </button>
@@ -728,46 +735,22 @@ function CampusShell() {
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-7 pb-24 lg:pb-12 space-y-5 sm:space-y-6 min-w-0">
+        <main className="landscape-main-pad flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-7 pb-24 lg:pb-12 space-y-5 sm:space-y-6 min-w-0">
           {activeTab !== 'dashboard' && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-slate-600 dark:text-slate-400">
-              <div className="flex items-center gap-2 min-w-0">
-                <button
-                  type="button"
-                  onClick={() => navigateTo('dashboard')}
-                  className="min-h-[38px] px-2.5 py-1 -ml-1 rounded-lg font-semibold text-[#0B3321] dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-slate-800 inline-flex items-center gap-1 shrink-0"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span className="sm:hidden">Início</span>
-                  <span className="hidden sm:inline">Painel do Estudante</span>
-                </button>
-                <span aria-hidden="true" className="text-slate-400">
-                  /
-                </span>
-                <span className="text-slate-900 dark:text-slate-100 font-semibold truncate">{activeSectionLabel}</span>
-              </div>
-
-              {/* Mobile Campus Switcher when inside inner view */}
-              <div className="flex md:hidden items-center gap-1 p-0.5 bg-slate-200/70 dark:bg-slate-800 rounded-xl w-full sm:w-auto">
-                <button
-                  type="button"
-                  onClick={() => handleChangeCampus('superior')}
-                  className={`flex-1 min-h-[36px] px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors truncate ${
-                    selectedCampus === 'superior' ? 'bg-[#0B3321] text-white' : 'text-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  Superior (PL.AL.102)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleChangeCampus('medio')}
-                  className={`flex-1 min-h-[36px] px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors truncate ${
-                    selectedCampus === 'medio' ? 'bg-[#0B3321] text-white' : 'text-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  Médio (PL.AL.060)
-                </button>
-              </div>
+            <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 min-w-0">
+              <button
+                type="button"
+                onClick={() => navigateTo('dashboard')}
+                className="min-h-[38px] px-2.5 py-1 -ml-1 rounded-lg font-semibold text-[#0B3321] dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-slate-800 inline-flex items-center gap-1 shrink-0"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="sm:hidden">Início</span>
+                <span className="hidden sm:inline">Painel do Estudante</span>
+              </button>
+              <span aria-hidden="true" className="text-slate-400">
+                /
+              </span>
+              <span className="text-slate-900 dark:text-slate-100 font-semibold truncate">{activeSectionLabel}</span>
             </div>
           )}
 
@@ -981,10 +964,15 @@ function CampusShell() {
                 }}
               />
             )}
+            {activeTab === 'requests' && (
+              <RequestsCenterView campus={selectedCampus} mode="student" />
+            )}
             {activeTab === 'settings' && (
               <SettingsView
                 campus={selectedCampus}
                 onChangeCampus={handleChangeCampus}
+                medioCargoGroup={selectedMedioCargo}
+                onChangeMedioCargoGroup={handleChangeMedioCargo}
                 onNavigate={navigateTo}
               />
             )}
@@ -1090,97 +1078,134 @@ function CampusShell() {
               </div>
             </div>
 
-            {/* All remaining sections as thumb-friendly tiles */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-              {canAccessTeacherPanel && (
-                <button
-                  type="button"
-                  onClick={() => navigateTo('teacher')}
-                  className={`min-h-[58px] p-3 rounded-2xl border text-left transition-transform active:scale-[0.98] flex items-start gap-2.5 ${
-                    activeTab === 'teacher'
-                      ? 'border-[#0B3321] bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-200'
-                      : 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-950/30 text-[#0B3321] dark:text-emerald-200'
-                  }`}
+            {/* Clean Grouped Sections in Mais Bottom Sheet */}
+            <div className="space-y-4">
+              {mobileSheetGroups.map((group, gIdx) => (
+                <div
+                  key={group.groupLabel}
+                  className={gIdx > 0 ? 'pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2' : 'space-y-2'}
                 >
-                  <div className="w-8 h-8 rounded-xl bg-[#0B3321] text-white flex items-center justify-center shrink-0">
-                    <BookOpen className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold truncate">Professor</p>
-                    <p className="text-[11px] text-emerald-800 dark:text-emerald-300 truncate mt-0.5">Turmas e notas</p>
-                  </div>
-                </button>
-              )}
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-1">
+                    {group.groupLabel}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {group.groupLabel === 'Gestão e configurações' && canAccessTeacherPanel && (
+                      <button
+                        type="button"
+                        onClick={() => navigateTo('teacher')}
+                        className={`min-h-[54px] p-3 rounded-2xl border text-left flex items-center gap-3 ${
+                          activeTab === 'teacher'
+                            ? 'border-[#0B3321] bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-200'
+                            : 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/30 text-[#0B3321] dark:text-emerald-200'
+                        }`}
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-[#0B3321] text-white flex items-center justify-center shrink-0">
+                          <BookOpen className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold truncate">Console do Professor</p>
+                          <p className="text-[11px] text-emerald-800 dark:text-emerald-300 truncate">Turmas, aulas e notas</p>
+                        </div>
+                      </button>
+                    )}
 
-              {canAccessAdminPanel && (
-                <button
-                  type="button"
-                  onClick={() => navigateTo('admin')}
-                  className={`min-h-[58px] p-3 rounded-2xl border text-left transition-transform active:scale-[0.98] flex items-start gap-2.5 ${
-                    activeTab === 'admin'
-                      ? 'border-[#0B3321] bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-200'
-                      : 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-950/30 text-[#0B3321] dark:text-emerald-200'
-                  }`}
-                >
-                  <div className="w-8 h-8 rounded-xl bg-[#0B3321] text-white flex items-center justify-center shrink-0">
-                    <ShieldCheck className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold truncate">Painel Admin</p>
-                    <p className="text-[11px] text-emerald-800 dark:text-emerald-300 truncate mt-0.5">
-                      {formatRoleLabel(effectiveRole)}
-                    </p>
-                  </div>
-                </button>
-              )}
+                    {group.groupLabel === 'Gestão e configurações' && canAccessAdminPanel && (
+                      <button
+                        type="button"
+                        onClick={() => navigateTo('admin')}
+                        className={`min-h-[54px] p-3 rounded-2xl border text-left flex items-center gap-3 ${
+                          activeTab === 'admin'
+                            ? 'border-[#0B3321] bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-200'
+                            : 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/30 text-[#0B3321] dark:text-emerald-200'
+                        }`}
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-[#0B3321] text-white flex items-center justify-center shrink-0">
+                          <ShieldCheck className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold truncate">Painel Admin / Editor</p>
+                          <p className="text-[11px] text-emerald-800 dark:text-emerald-300 truncate">
+                            {formatRoleLabel(effectiveRole)}
+                          </p>
+                        </div>
+                      </button>
+                    )}
 
-              {mobileSheetItems.map((item) => {
-                const Icon = item.icon;
-                const active = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => navigateTo(item.id)}
-                    className={`min-h-[58px] p-3 rounded-2xl border text-left transition-transform active:scale-[0.98] flex items-start gap-2.5 ${
-                      active
-                        ? 'border-[#0B3321] bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-200'
-                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-900 dark:text-slate-100'
-                    }`}
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                        active
-                          ? 'bg-[#0B3321] text-white'
-                          : 'bg-[#E8F3EC] dark:bg-emerald-950/50 text-[#146C43] dark:text-emerald-300'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => navigateTo(item.id)}
+                          className={`min-h-[54px] p-3 rounded-2xl border text-left transition-transform active:scale-[0.98] flex items-center gap-3 ${
+                            active
+                              ? 'border-[#0B3321] bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-200'
+                              : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-900 dark:text-slate-100'
+                          }`}
+                        >
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                              active
+                                ? 'bg-[#0B3321] text-white'
+                                : 'bg-[#E8F3EC] dark:bg-emerald-950/50 text-[#146C43] dark:text-emerald-300'
+                            }`}
+                          >
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold truncate">{item.label}</p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{item.subtitle}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+
+                    {group.groupLabel === 'Minha preparação' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setContentInitialScope('geral');
+                          navigateTo('materials');
+                        }}
+                        className="min-h-[54px] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-left flex items-center gap-3"
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-[#E8F3EC] dark:bg-emerald-950/50 text-[#146C43] dark:text-emerald-300 flex items-center justify-center shrink-0">
+                          <ChevronRight className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">Aba Geral</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Matérias comuns</p>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+
+                  {group.groupLabel === 'Gestão e configurações' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void updateStudentPreferences({
+                            theme: preferences.theme === 'dark' ? 'light' : 'dark',
+                          })
+                        }
+                        className="min-h-[44px] w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-2 whitespace-nowrap"
+                      >
+                        {preferences.theme === 'dark' ? (
+                          <Sun className="w-4 h-4 text-amber-500 shrink-0" />
+                        ) : (
+                          <Moon className="w-4 h-4 text-[#146C43] shrink-0" />
+                        )}
+                        <span>{preferences.theme === 'dark' ? 'Tema Claro' : 'Tema Escuro'}</span>
+                      </button>
+                      <ShareAppButton variant="menu" />
+                      <PWAInstallButton variant="menu" />
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold truncate">{item.label}</p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">{item.subtitle}</p>
-                    </div>
-                  </button>
-                );
-              })}
-
-              <button
-                type="button"
-                onClick={() => {
-                  setContentInitialScope('geral');
-                  navigateTo('materials');
-                }}
-                className="min-h-[58px] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-left transition-transform active:scale-[0.98] flex items-start gap-2.5"
-              >
-                <div className="w-8 h-8 rounded-xl bg-[#E8F3EC] dark:bg-emerald-950/50 text-[#146C43] dark:text-emerald-300 flex items-center justify-center shrink-0">
-                  <ChevronRight className="w-4 h-4" />
+                  )}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">Aba Geral</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">Matérias comuns</p>
-                </div>
-              </button>
+              ))}
             </div>
 
             {/* Account & Login Card in Mobile Drawer */}
@@ -1229,10 +1254,10 @@ function CampusShell() {
         </div>
       )}
 
-      {/* Mobile & Tablet Portrait Bottom Tab Bar (5 ergonomic tabs >= 48px in thumb zone) */}
+      {/* Mobile & Tablet Portrait Bottom Tab Bar (5 ergonomic tabs >= 48px, 24x24 icons) */}
       <nav
         aria-label="Navegação inferior mobile"
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 grid grid-cols-5 items-center h-16 pb-safe"
+        className="landscape-compact-hidden lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 grid grid-cols-5 items-center h-16 pb-safe"
       >
         {primaryMobileTabs.map((tab) => {
           const Icon = tab.icon;
@@ -1249,8 +1274,8 @@ function CampusShell() {
               {isActive && (
                 <span className="absolute top-0 w-7 h-0.5 rounded-full bg-[#0B3321] dark:bg-emerald-400" />
               )}
-              <Icon className="w-5 h-5" />
-              <span className="text-[11px] tracking-tight mt-1 whitespace-nowrap">{tab.label}</span>
+              <Icon className="w-6 h-6" />
+              <span className="text-[11px] tracking-tight mt-0.5 whitespace-nowrap">{tab.label}</span>
             </button>
           );
         })}
@@ -1268,8 +1293,50 @@ function CampusShell() {
           {(mobileMenuOpen || isMoreTabActive) && (
             <span className="absolute top-0 w-7 h-0.5 rounded-full bg-[#0B3321] dark:bg-emerald-400" />
           )}
-          <LayoutGrid className="w-5 h-5" />
-          <span className="text-[11px] tracking-tight mt-1 whitespace-nowrap">Mais</span>
+          <LayoutGrid className="w-6 h-6" />
+          <span className="text-[11px] tracking-tight mt-0.5 whitespace-nowrap">Mais</span>
+        </button>
+      </nav>
+
+      {/* Mobile Compact Landscape Left Navigation Rail (>= 48x48 touch targets, 24x24 icons) */}
+      <nav
+        aria-label="Navegação lateral compacta"
+        className="landscape-rail fixed left-0 top-0 bottom-0 z-40 w-14 flex-col items-center justify-around py-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-r border-slate-200 dark:border-slate-800"
+      >
+        {primaryMobileTabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id || (tab.id === 'videos' && activeTab === 'podcasts');
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => navigateTo(tab.id)}
+              aria-label={tab.label}
+              title={tab.label}
+              className={`min-w-[48px] min-h-[48px] rounded-xl flex items-center justify-center transition-colors ${
+                isActive
+                  ? 'bg-[#0B3321] text-white'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Icon className="w-6 h-6" />
+            </button>
+          );
+        })}
+
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen(true)}
+          aria-label="Mais recursos"
+          title="Mais recursos"
+          aria-expanded={mobileMenuOpen}
+          className={`min-w-[48px] min-h-[48px] rounded-xl flex items-center justify-center transition-colors ${
+            mobileMenuOpen || isMoreTabActive
+              ? 'bg-[#0B3321] text-white'
+              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <LayoutGrid className="w-6 h-6" />
         </button>
       </nav>
       <OfflineIndicator />

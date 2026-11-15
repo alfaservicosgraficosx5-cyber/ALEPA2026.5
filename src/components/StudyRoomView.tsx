@@ -27,6 +27,7 @@ import { VERIFIED_OFFICIAL_AND_ACADEMIC_SOURCES } from '../data/verifiedSources'
 import {
   CampusLevel,
   FlashcardItem,
+  MediaPlaybackPreference,
   MedioCargoGroup,
   MindMapData,
   NavSection,
@@ -37,6 +38,8 @@ import {
 import { addDaysIso, saveLastStudiedContext } from '../utils/mediaUrls';
 import { isPdfReadableMaterial } from '../lib/pdfBookEngine';
 import { BookReaderModal } from './BookReaderModal';
+import { MediaPlaybackModal } from './MediaPlaybackModal';
+import { PlaybackChoiceModal } from './PlaybackChoiceModal';
 import { parseVideoEmbed } from './VideosView';
 import { PageHeader, SectionCard } from './ui/CampusPrimitives';
 
@@ -98,6 +101,10 @@ export function StudyRoomView({
     errorNotebook,
     addErrorEntry,
     getCampusDisciplines,
+    preferences,
+    updateStudentPreferences,
+    mediaProgressMap,
+    saveMediaProgress,
   } = useAuth();
   const isMedio = campus === 'medio';
   const disciplines = useMemo(
@@ -130,11 +137,52 @@ export function StudyRoomView({
   const [flippedCards, setFlippedCards] = useState<Record<string, boolean>>({});
   const [cardRatings, setCardRatings] = useState<Record<string, 'facil' | 'revisar'>>({});
 
-  // Quick Quiz state
+  // Quick Quiz & Media/Reader state
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
   const [activeBookMaterial, setActiveBookMaterial] = useState<StudyMaterial | null>(null);
+  const [readerInitialPage, setReaderInitialPage] = useState<number | undefined>(undefined);
   const [activeRoomTab, setActiveRoomTab] = useState<StudyRoomTabId>('teoria');
   const [activeVideoMaterial, setActiveVideoMaterial] = useState<StudyMaterial | null>(null);
+  const [playbackChoiceTarget, setPlaybackChoiceTarget] = useState<{
+    material: StudyMaterial;
+    startSeconds?: number;
+  } | null>(null);
+  const [modalMediaPlayer, setModalMediaPlayer] = useState<{
+    material: StudyMaterial;
+    mode: 'internal' | 'external';
+    startSeconds?: number;
+  } | null>(null);
+
+  const launchMediaPlayback = (mat: StudyMaterial, mode: 'internal' | 'external', startSeconds?: number) => {
+    setModalMediaPlayer({ material: mat, mode, startSeconds });
+    if (mode === 'external') {
+      void saveMediaProgress(mat.id, {
+        materialTitle: mat.title,
+        mediaType: mat.resourceType === 'podcast' ? 'audio' : 'video',
+        preferredMode: 'external',
+        openedExternallyAt: new Date().toISOString(),
+      });
+    }
+  };
+
+  const handleOpenMedia = (mat: StudyMaterial, startSeconds?: number) => {
+    const pref = preferences.mediaPlaybackPreference || 'ask';
+    if (pref === 'ask') {
+      setPlaybackChoiceTarget({ material: mat, startSeconds });
+      return;
+    }
+    launchMediaPlayback(mat, pref === 'external' ? 'external' : 'internal', startSeconds);
+  };
+
+  const handlePlaybackChoice = (mode: 'internal' | 'external', savePreference?: MediaPlaybackPreference) => {
+    if (!playbackChoiceTarget) return;
+    const { material, startSeconds } = playbackChoiceTarget;
+    if (savePreference) {
+      void updateStudentPreferences({ mediaPlaybackPreference: savePreference });
+    }
+    setPlaybackChoiceTarget(null);
+    launchMediaPlayback(material, mode, startSeconds);
+  };
 
   useEffect(() => {
     if (!activeTopic || !activeDiscipline) return;
@@ -607,20 +655,48 @@ export function StudyRoomView({
                   const allowDownload = mat.allowDownload !== false;
                   if (openInBookReader) {
                     return (
-                      <button
+                      <div
                         key={mat.id}
-                        type="button"
-                        onClick={() => setActiveBookMaterial(mat)}
-                        className="w-full text-left p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs transition-colors"
+                        className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 space-y-2 text-xs transition-colors"
                       >
-                        <div className="min-w-0">
-                          <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{mat.title}</p>
-                          <p className="text-[11px] text-[#146C43] dark:text-emerald-400 font-medium mt-0.5">
-                            Ler no Book Reader · {mat.institution || 'Biblioteca ALEPA'}
-                          </p>
-                        </div>
-                        <BookOpen className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReaderInitialPage(undefined);
+                            setActiveBookMaterial(mat);
+                          }}
+                          className="w-full text-left flex items-start justify-between gap-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{mat.title}</p>
+                            {mat.subtitle && (
+                              <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">{mat.subtitle}</p>
+                            )}
+                            <p className="text-[11px] text-[#146C43] dark:text-emerald-400 font-medium mt-0.5">
+                              Ler no Book Reader · {mat.institution || 'Biblioteca ALEPA'}
+                            </p>
+                          </div>
+                          <BookOpen className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
+                        </button>
+                        {mat.chapters && mat.chapters.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                            {mat.chapters.slice(0, 4).map((ch) => (
+                              <button
+                                key={ch.id}
+                                type="button"
+                                onClick={() => {
+                                  setReaderInitialPage(ch.startPage);
+                                  setActiveBookMaterial(mat);
+                                }}
+                                className="px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] text-slate-700 dark:text-slate-300 hover:border-[#146C43]"
+                              >
+                                {ch.title}
+                                {ch.startPage ? ` (p. ${ch.startPage})` : ''}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     );
                   }
                   return (
@@ -767,36 +843,57 @@ export function StudyRoomView({
                 <div className="space-y-2.5">
                   {topicMaterials.videos.map((v) => {
                     const parsed = parseVideoEmbed(v.url, v.institution);
+                    const prog = mediaProgressMap[v.id];
                     return (
                       <div
                         key={v.id}
-                        className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 flex items-center justify-between gap-3 text-xs"
+                        className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 space-y-2 text-xs"
                       >
-                        <div className="min-w-0">
-                          <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{v.title}</p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                            {parsed.platformLabel} · {v.institution || 'Aula'}
-                          </p>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{v.title}</p>
+                            {v.subtitle && (
+                              <p className="text-[11px] text-[#146C43] dark:text-emerald-400 mt-0.5">{v.subtitle}</p>
+                            )}
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                              {parsed.platformLabel} · {v.institution || 'Aula'}
+                              {prog && prog.progressPercent > 0 ? ` · ${prog.progressPercent}%` : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenMedia(v)}
+                              className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#0B3321] hover:bg-[#146C43] text-white font-semibold inline-flex items-center gap-1"
+                            >
+                              <Play className="w-3.5 h-3.5" />
+                              <span>{prog && prog.currentTimeSeconds > 0 ? 'Continuar' : 'Assistir'}</span>
+                            </button>
+                            <a
+                              href={v.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="Abrir vídeo em nova guia"
+                              className="min-w-[36px] min-h-[36px] rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setActiveVideoMaterial(v)}
-                            className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#0B3321] hover:bg-[#146C43] text-white font-semibold inline-flex items-center gap-1"
-                          >
-                            <Play className="w-3.5 h-3.5" />
-                            <span>Assistir</span>
-                          </button>
-                          <a
-                            href={v.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-label="Abrir vídeo em nova guia"
-                            className="min-w-[36px] min-h-[36px] rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        </div>
+                        {v.chapters && v.chapters.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                            {v.chapters.slice(0, 4).map((ch) => (
+                              <button
+                                key={ch.id}
+                                type="button"
+                                onClick={() => handleOpenMedia(v, ch.startSeconds)}
+                                className="px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] text-slate-700 dark:text-slate-300 hover:border-[#146C43]"
+                              >
+                                {ch.title}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -823,21 +920,60 @@ export function StudyRoomView({
                 </p>
               ) : (
                 <div className="space-y-2.5">
-                  {topicMaterials.audios.map((a) => (
-                    <a
-                      key={a.id}
-                      href={a.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{a.title}</p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Podcast / Áudio</p>
+                  {topicMaterials.audios.map((a) => {
+                    const prog = mediaProgressMap[a.id];
+                    return (
+                      <div
+                        key={a.id}
+                        className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 space-y-2 text-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{a.title}</p>
+                            {a.subtitle && (
+                              <p className="text-[11px] text-[#146C43] dark:text-emerald-400 mt-0.5">{a.subtitle}</p>
+                            )}
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                              Podcast / Áudio{prog && prog.progressPercent > 0 ? ` · ${prog.progressPercent}%` : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenMedia(a)}
+                              className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#0B3321] hover:bg-[#146C43] text-white font-semibold inline-flex items-center gap-1"
+                            >
+                              <Headphones className="w-3.5 h-3.5" />
+                              <span>{prog && prog.currentTimeSeconds > 0 ? 'Continuar' : 'Ouvir'}</span>
+                            </button>
+                            <a
+                              href={a.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="Abrir áudio em nova guia"
+                              className="min-w-[36px] min-h-[36px] rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          </div>
+                        </div>
+                        {a.chapters && a.chapters.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                            {a.chapters.slice(0, 4).map((ch) => (
+                              <button
+                                key={ch.id}
+                                type="button"
+                                onClick={() => handleOpenMedia(a, ch.startSeconds)}
+                                className="px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] text-slate-700 dark:text-slate-300 hover:border-[#146C43]"
+                              >
+                                {ch.title}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <Headphones className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
-                    </a>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </SectionCard>
@@ -1158,7 +1294,30 @@ export function StudyRoomView({
       {activeBookMaterial && (
         <BookReaderModal
           material={activeBookMaterial}
-          onClose={() => setActiveBookMaterial(null)}
+          initialPage={readerInitialPage}
+          onClose={() => {
+            setActiveBookMaterial(null);
+            setReaderInitialPage(undefined);
+          }}
+        />
+      )}
+
+      {playbackChoiceTarget && (
+        <PlaybackChoiceModal
+          material={playbackChoiceTarget.material}
+          currentPreference={preferences.mediaPlaybackPreference || 'ask'}
+          onChooseInternal={(savePref) => handlePlaybackChoice('internal', savePref)}
+          onChooseExternal={(savePref) => handlePlaybackChoice('external', savePref)}
+          onClose={() => setPlaybackChoiceTarget(null)}
+        />
+      )}
+
+      {modalMediaPlayer && (
+        <MediaPlaybackModal
+          material={modalMediaPlayer.material}
+          initialMode={modalMediaPlayer.mode}
+          initialStartSeconds={modalMediaPlayer.startSeconds}
+          onClose={() => setModalMediaPlayer(null)}
         />
       )}
     </div>

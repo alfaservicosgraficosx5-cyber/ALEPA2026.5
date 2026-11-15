@@ -7,6 +7,7 @@ import {
   Lock,
   Play,
   Plus,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   Video,
@@ -18,7 +19,17 @@ import { MEDIO_LIBRARY_CATEGORIES } from '../data/alepaMedioLibrary';
 import { isMedioDisciplineId } from '../data/alepaMedioSyllabus';
 import { LIBRARY_CATEGORIES } from '../data/alepaQuestions';
 import { getDisciplineShortName } from '../data/alepaSyllabus';
-import { CampusLevel, LibraryCategory, LibraryCategoryId, LibraryScope, StudyMaterial } from '../types';
+import {
+  CampusLevel,
+  LibraryCategory,
+  LibraryCategoryId,
+  LibraryScope,
+  MediaPlaybackPreference,
+  StudyMaterial,
+} from '../types';
+import { ContentOrganizerModal } from './ContentOrganizerModal';
+import { MediaPlaybackModal } from './MediaPlaybackModal';
+import { PlaybackChoiceModal } from './PlaybackChoiceModal';
 
 type VideoPlatform = 'youtube' | 'instagram' | 'tiktok' | 'vimeo' | 'drive' | 'direct' | 'other';
 type VideoFilterScope = 'all' | LibraryScope;
@@ -234,8 +245,20 @@ export function VideosView({
     disciplineId?: string;
   }) => void;
 }) {
-  const { materials, addMaterial, deleteMaterial, user, profile, isAdmin, canPublishShared, loginWithGoogle } =
-    useAuth();
+  const {
+    materials,
+    addMaterial,
+    deleteMaterial,
+    user,
+    profile,
+    isAdmin,
+    canPublishShared,
+    loginWithGoogle,
+    preferences,
+    updateStudentPreferences,
+    mediaProgressMap,
+    saveMediaProgress,
+  } = useAuth();
 
   const isMedio = campus === 'medio';
   const [libraryScope, setLibraryScope] = useState<VideoFilterScope>('all');
@@ -275,8 +298,18 @@ export function VideosView({
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  // Active Video Player State
+  // Active Video Player & Modal Playback / Organizer State
   const [activeVideo, setActiveVideo] = useState<StudyMaterial | null>(null);
+  const [playbackChoiceTarget, setPlaybackChoiceTarget] = useState<{
+    material: StudyMaterial;
+    startSeconds?: number;
+  } | null>(null);
+  const [modalPlayer, setModalPlayer] = useState<{
+    material: StudyMaterial;
+    mode: 'internal' | 'external';
+    startSeconds?: number;
+  } | null>(null);
+  const [organizingVideo, setOrganizingVideo] = useState<StudyMaterial | null>(null);
   const [brokenThumbs, setBrokenThumbs] = useState<Record<string, boolean>>({});
   const playerSectionRef = useRef<HTMLElement | null>(null);
 
@@ -350,11 +383,35 @@ export function VideosView({
     [videoUrl, channelName]
   );
 
-  const handleOpenPlayer = (vid: StudyMaterial) => {
-    setActiveVideo(vid);
-    window.setTimeout(() => {
-      playerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 60);
+  const launchMediaPlayback = (vid: StudyMaterial, mode: 'internal' | 'external', startSeconds?: number) => {
+    setModalPlayer({ material: vid, mode, startSeconds });
+    if (mode === 'external') {
+      void saveMediaProgress(vid.id, {
+        materialTitle: vid.title,
+        mediaType: 'video',
+        preferredMode: 'external',
+        openedExternallyAt: new Date().toISOString(),
+      });
+    }
+  };
+
+  const handleOpenPlayer = (vid: StudyMaterial, startSeconds?: number) => {
+    const pref = preferences.mediaPlaybackPreference || 'ask';
+    if (pref === 'ask') {
+      setPlaybackChoiceTarget({ material: vid, startSeconds });
+      return;
+    }
+    launchMediaPlayback(vid, pref === 'external' ? 'external' : 'internal', startSeconds);
+  };
+
+  const handlePlaybackChoice = (mode: 'internal' | 'external', savePreference?: MediaPlaybackPreference) => {
+    if (!playbackChoiceTarget) return;
+    const { material, startSeconds } = playbackChoiceTarget;
+    if (savePreference) {
+      void updateStudentPreferences({ mediaPlaybackPreference: savePreference });
+    }
+    setPlaybackChoiceTarget(null);
+    launchMediaPlayback(material, mode, startSeconds);
   };
 
   const handleAddVideo = async (e: React.FormEvent) => {
@@ -848,9 +905,12 @@ export function VideosView({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredVideos.map((vid) => {
             const parsed = parseVideoEmbed(vid.url, vid.institution);
-            const canDelete = !vid.isSystemDefault && (isAdmin || vid.ownerId === (user?.uid || profile?.uid));
+            const uid = user?.uid || profile?.uid;
+            const canDelete = !vid.isSystemDefault && (isAdmin || vid.ownerId === uid);
+            const canOrganize = canPublishShared || (!vid.isSystemDefault && vid.ownerId === uid);
             const isPublicVisible = Boolean(vid.isShared || vid.isSystemDefault);
             const showThumb = Boolean(parsed.thumbnailUrl && !brokenThumbs[vid.id]);
+            const mediaProg = mediaProgressMap[vid.id];
 
             return (
               <article
@@ -930,10 +990,22 @@ export function VideosView({
                       <span className="mt-0.5 w-6 h-6 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[#0B3321] dark:text-emerald-300 group-hover:bg-[#0B3321] group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
                         <Play className="w-3 h-3 fill-current ml-0.5" />
                       </span>
-                      <h3 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 group-hover:text-[#0B3321] dark:group-hover:text-emerald-400 transition-colors">
-                        {vid.title}
-                      </h3>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 group-hover:text-[#0B3321] dark:group-hover:text-emerald-400 transition-colors">
+                          {vid.title}
+                        </h3>
+                        {vid.subtitle && (
+                          <p className="text-xs font-medium text-[#146C43] dark:text-emerald-400 mt-0.5">
+                            {vid.subtitle}
+                          </p>
+                        )}
+                      </div>
                     </button>
+                    {mediaProg && mediaProg.progressPercent > 0 && (
+                      <p className="text-[11px] font-mono tabular-nums text-[#146C43] dark:text-emerald-400 font-semibold">
+                        Progresso salvo: {mediaProg.progressPercent}%
+                      </p>
+                    )}
                     {vid.editalTopic && (
                       <p className="text-xs text-slate-600 dark:text-slate-400">
                         <span className="font-semibold text-slate-700 dark:text-slate-300">Assunto: </span>
@@ -941,6 +1013,20 @@ export function VideosView({
                       </p>
                     )}
                     {vid.description && <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{vid.description}</p>}
+                    {vid.chapters && vid.chapters.length > 0 && (
+                      <div className="pt-1 flex flex-wrap gap-1.5">
+                        {vid.chapters.slice(0, 4).map((ch) => (
+                          <button
+                            key={ch.id}
+                            type="button"
+                            onClick={() => handleOpenPlayer(vid, ch.startSeconds)}
+                            className="px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-[11px] text-slate-700 dark:text-slate-300 hover:border-[#146C43]"
+                          >
+                            {ch.title}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -951,7 +1037,7 @@ export function VideosView({
                         className="min-h-[38px] px-3.5 py-1.5 bg-[#0B3321] hover:bg-[#134b32] text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
                       >
                         <Play className="w-3.5 h-3.5 fill-current" />
-                        <span>{parsed.embedUrl ? 'Dar Play' : 'Abrir player'}</span>
+                        <span>{mediaProg && mediaProg.currentTimeSeconds > 0 ? 'Continuar' : 'Dar Play'}</span>
                       </button>
 
                       <a
@@ -984,22 +1070,62 @@ export function VideosView({
                       )}
                     </div>
 
-                    {canDelete && (
-                      <button
-                        type="button"
-                        onClick={() => void deleteMaterial(vid.id)}
-                        aria-label="Excluir vídeo"
-                        className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-slate-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {canOrganize && (
+                        <button
+                          type="button"
+                          onClick={() => setOrganizingVideo(vid)}
+                          aria-label="Organizar capítulos e metadados"
+                          className="min-h-[38px] px-2.5 flex items-center justify-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B3321] dark:text-emerald-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                        >
+                          <SlidersHorizontal className="w-3.5 h-3.5" />
+                          <span>Organizar</span>
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => void deleteMaterial(vid.id)}
+                          aria-label="Excluir vídeo"
+                          className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-slate-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </article>
             );
           })}
         </div>
+      )}
+
+      {playbackChoiceTarget && (
+        <PlaybackChoiceModal
+          material={playbackChoiceTarget.material}
+          currentPreference={preferences.mediaPlaybackPreference || 'ask'}
+          onChooseInternal={(savePref) => handlePlaybackChoice('internal', savePref)}
+          onChooseExternal={(savePref) => handlePlaybackChoice('external', savePref)}
+          onClose={() => setPlaybackChoiceTarget(null)}
+        />
+      )}
+
+      {modalPlayer && (
+        <MediaPlaybackModal
+          material={modalPlayer.material}
+          initialMode={modalPlayer.mode}
+          initialStartSeconds={modalPlayer.startSeconds}
+          onClose={() => setModalPlayer(null)}
+        />
+      )}
+
+      {organizingVideo && (
+        <ContentOrganizerModal
+          material={organizingVideo}
+          campus={campus}
+          onClose={() => setOrganizingVideo(null)}
+        />
       )}
     </div>
   );

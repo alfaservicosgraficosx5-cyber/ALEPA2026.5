@@ -18,7 +18,7 @@ export function getPublicAppBaseUrl(): string {
 }
 
 interface ShareAppButtonProps {
-  variant?: 'header' | 'card';
+  variant?: 'header' | 'card' | 'menu';
 }
 
 export function ShareAppButton({ variant = 'header' }: ShareAppButtonProps) {
@@ -57,11 +57,13 @@ export function ShareAppButton({ variant = 'header' }: ShareAppButtonProps) {
         className={
           variant === 'card'
             ? 'min-h-[42px] px-4 py-2 bg-[#146C43] hover:bg-[#0B3321] text-white text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center gap-2 whitespace-nowrap'
-            : 'min-h-[38px] px-2.5 sm:px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0'
+            : variant === 'menu'
+              ? 'min-h-[44px] w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-2 whitespace-nowrap'
+              : 'min-h-[38px] px-2.5 sm:px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0'
         }
       >
-        <Share2 className="w-3.5 h-3.5 text-[#146C43]" />
-        <span className="hidden sm:inline">Compartilhar</span>
+        <Share2 className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0" />
+        <span className={variant === 'header' ? 'hidden sm:inline' : ''}>Compartilhar</span>
       </button>
 
       {open && (

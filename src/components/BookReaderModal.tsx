@@ -60,6 +60,7 @@ type SidebarTab = 'outline' | 'bookmarks' | 'highlights' | 'annotations' | 'sear
 
 interface BookReaderModalProps {
   material: StudyMaterial;
+  initialPage?: number;
   onClose: () => void;
   onSummarizeWithGemini?: (target: {
     mode: 'pdf';
@@ -318,6 +319,7 @@ function PdfCanvasSheet({
 
 export function BookReaderModal({
   material,
+  initialPage,
   onClose,
   onSummarizeWithGemini,
 }: BookReaderModalProps) {
@@ -365,7 +367,12 @@ export function BookReaderModal({
   const [measuredWidth, setMeasuredWidth] = useState<number>(760);
 
   // Active reader settings & reading state
-  const initialPageVal = Math.max(1, initialSaved?.lastPage || material.startPage || 1);
+  const initialPageVal = Math.max(
+    1,
+    typeof initialPage === 'number' && initialPage >= 1
+      ? Math.round(initialPage)
+      : initialSaved?.lastPage || material.startPage || 1
+  );
   const [currentPage, setCurrentPage] = useState<number>(initialPageVal);
   const [pageInput, setPageInput] = useState<string>(String(initialPageVal));
   const [readingMode, setReadingMode] = useState<BookReaderMode>(initialSaved?.readingMode || 'book');
@@ -1093,19 +1100,106 @@ export function BookReaderModal({
 
       <div className="flex-1 overflow-y-auto p-3.5 space-y-3 text-xs">
         {activeTab === 'outline' && (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <p className="font-semibold">Sumário do Documento</p>
+              <p className="font-semibold">Sumário e Capítulos</p>
               <span className={`font-mono text-[11px] ${themeStyle.textMuted}`}>
                 {numPages} págs.
               </span>
             </div>
+
+            {material.chapters && material.chapters.length > 0 && (
+              <div className="space-y-1.5">
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${themeStyle.textMuted}`}>
+                  Capítulos Organizados
+                </p>
+                <ul className="space-y-1">
+                  {material.chapters.map((ch, idx) => {
+                    const targetPage = typeof ch.startPage === 'number' && ch.startPage >= 1 ? ch.startPage : null;
+                    return (
+                      <li key={ch.id || idx}>
+                        <button
+                          type="button"
+                          disabled={!targetPage}
+                          onClick={() => {
+                            if (targetPage) {
+                              goToPage(targetPage);
+                              if (!viewportSize.isDesktop) setPanelOpen(false);
+                            }
+                          }}
+                          className={`w-full text-left px-2.5 py-2 rounded-lg border ${themeStyle.border} hover:bg-emerald-500/10 disabled:opacity-65 flex items-start justify-between gap-2 transition-colors`}
+                        >
+                          <div className="min-w-0">
+                            <p className="font-semibold truncate">{ch.title}</p>
+                            {(ch.summary || ch.description) && (
+                              <p className={`text-[11px] line-clamp-2 ${themeStyle.textMuted}`}>{ch.summary || ch.description}</p>
+                            )}
+                          </div>
+                          {targetPage && (
+                            <span className={`font-mono text-[10px] shrink-0 ${themeStyle.textMuted}`}>
+                              p. {targetPage}
+                              {ch.endPage && ch.endPage > targetPage ? `–${ch.endPage}` : ''}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            {material.sections && material.sections.length > 0 && (
+              <div className="space-y-1.5">
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${themeStyle.textMuted}`}>
+                  Seções do Edital
+                </p>
+                <ul className="space-y-1">
+                  {material.sections.map((sec) => (
+                    <li key={sec.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          goToPage(sec.startPage);
+                          if (!viewportSize.isDesktop) setPanelOpen(false);
+                        }}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg border ${themeStyle.border} hover:bg-emerald-500/10 flex items-center justify-between gap-2 transition-colors`}
+                      >
+                        <span className="truncate font-medium">{sec.title}</span>
+                        <span className={`font-mono text-[10px] shrink-0 ${themeStyle.textMuted}`}>
+                          p. {sec.startPage}–{sec.endPage}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {outline.length > 0 ? (
-              renderOutlineTree(outline)
-            ) : (
+              <div className="space-y-1.5">
+                {(material.chapters?.length || material.sections?.length) ? (
+                  <p className={`text-[10px] font-bold uppercase tracking-wider ${themeStyle.textMuted}`}>
+                    Índice Embutido do PDF
+                  </p>
+                ) : null}
+                {renderOutlineTree(outline)}
+              </div>
+            ) : !material.chapters?.length && !material.sections?.length ? (
               <div className={`p-3 rounded-xl border ${themeStyle.border} ${themeStyle.textMuted} space-y-1.5`}>
                 <p className="font-medium">Este PDF não possui sumário embutido.</p>
                 <p>Use a navegação por páginas, os marcadores ou a busca de texto para localizar capítulos.</p>
+              </div>
+            ) : null}
+
+            {material.studyRecommendations && material.studyRecommendations.length > 0 && (
+              <div className={`p-3 rounded-xl border ${themeStyle.border} space-y-1.5`}>
+                <p className="font-semibold">Recomendações de Estudo</p>
+                <ul className={`list-disc pl-4 space-y-1 text-[11px] ${themeStyle.textMuted}`}>
+                  {material.studyRecommendations.map((rec, idx) => (
+                    <li key={idx}>{rec}</li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>

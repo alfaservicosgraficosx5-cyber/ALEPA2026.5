@@ -5,6 +5,7 @@ import {
   Play,
   Plus,
   Radio,
+  SlidersHorizontal,
   Trash2,
   X,
 } from 'lucide-react';
@@ -14,8 +15,11 @@ import { MEDIO_LIBRARY_CATEGORIES } from '../data/alepaMedioLibrary';
 import { isMedioDisciplineId } from '../data/alepaMedioSyllabus';
 import { LIBRARY_CATEGORIES } from '../data/alepaQuestions';
 import { getDisciplineShortName } from '../data/alepaSyllabus';
-import { CampusLevel, LibraryCategoryId, StudyMaterial } from '../types';
+import { CampusLevel, LibraryCategoryId, MediaPlaybackPreference, StudyMaterial } from '../types';
 import { SpotifyMediaItem } from '../lib/spotify';
+import { ContentOrganizerModal } from './ContentOrganizerModal';
+import { MediaPlaybackModal } from './MediaPlaybackModal';
+import { PlaybackChoiceModal } from './PlaybackChoiceModal';
 import { SpotifyPanel } from './SpotifyPanel';
 
 interface PodcastPlayerTarget {
@@ -107,7 +111,19 @@ function getPlatformLabel(rawUrl: string, fallbackInstitution?: string): string 
 }
 
 export function PodcastsView({ campus }: { campus: CampusLevel }) {
-  const { materials, addMaterial, deleteMaterial, user, profile, isAdmin, canPublishShared } = useAuth();
+  const {
+    materials,
+    addMaterial,
+    deleteMaterial,
+    user,
+    profile,
+    isAdmin,
+    canPublishShared,
+    preferences,
+    updateStudentPreferences,
+    mediaProgressMap,
+    saveMediaProgress,
+  } = useAuth();
 
   const isMedio = campus === 'medio';
   const activeCategories = isMedio ? MEDIO_LIBRARY_CATEGORIES : LIBRARY_CATEGORIES;
@@ -129,8 +145,18 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  // Active Embedded Player State
+  // Active Embedded Player & Unified Playback Modal / Organizer State
   const [activePodcast, setActivePodcast] = useState<StudyMaterial | null>(null);
+  const [playbackChoiceTarget, setPlaybackChoiceTarget] = useState<{
+    material: StudyMaterial;
+    startSeconds?: number;
+  } | null>(null);
+  const [modalPlayer, setModalPlayer] = useState<{
+    material: StudyMaterial;
+    mode: 'internal' | 'external';
+    startSeconds?: number;
+  } | null>(null);
+  const [organizingPodcast, setOrganizingPodcast] = useState<StudyMaterial | null>(null);
 
   useEffect(() => {
     setSelectedCategory('all');
@@ -252,6 +278,37 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
     if (formEl) {
       formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+  };
+
+  const launchPodcastPlayback = (pod: StudyMaterial, mode: 'internal' | 'external', startSeconds?: number) => {
+    setModalPlayer({ material: pod, mode, startSeconds });
+    if (mode === 'external') {
+      void saveMediaProgress(pod.id, {
+        materialTitle: pod.title,
+        mediaType: 'audio',
+        preferredMode: 'external',
+        openedExternallyAt: new Date().toISOString(),
+      });
+    }
+  };
+
+  const handleOpenPodcast = (pod: StudyMaterial, startSeconds?: number) => {
+    const pref = preferences.mediaPlaybackPreference || 'ask';
+    if (pref === 'ask') {
+      setPlaybackChoiceTarget({ material: pod, startSeconds });
+      return;
+    }
+    launchPodcastPlayback(pod, pref === 'external' ? 'external' : 'internal', startSeconds);
+  };
+
+  const handlePlaybackChoice = (mode: 'internal' | 'external', savePreference?: MediaPlaybackPreference) => {
+    if (!playbackChoiceTarget) return;
+    const { material, startSeconds } = playbackChoiceTarget;
+    if (savePreference) {
+      void updateStudentPreferences({ mediaPlaybackPreference: savePreference });
+    }
+    setPlaybackChoiceTarget(null);
+    launchPodcastPlayback(material, mode, startSeconds);
   };
 
   const handlePlaySpotifyItem = (item: SpotifyMediaItem, targetCatId: LibraryCategoryId) => {
@@ -644,9 +701,12 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {list.map((pod, idx) => {
-                    const canDelete = !pod.isSystemDefault && (isAdmin || pod.ownerId === (user?.uid || profile?.uid));
-                    const isPlaying = activePodcast?.id === pod.id;
+                    const uid = user?.uid || profile?.uid;
+                    const canDelete = !pod.isSystemDefault && (isAdmin || pod.ownerId === uid);
+                    const canOrganize = canPublishShared || (!pod.isSystemDefault && pod.ownerId === uid);
+                    const isPlaying = activePodcast?.id === pod.id || modalPlayer?.material.id === pod.id;
                     const platform = getPlatformLabel(pod.url, pod.institution);
+                    const mediaProg = mediaProgressMap[pod.id];
 
                     return (
                       <article
@@ -672,6 +732,16 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
                           </div>
 
                           <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">{pod.title}</h3>
+                          {pod.subtitle && (
+                            <p className="text-xs font-medium text-[#146C43] dark:text-emerald-400">
+                              {pod.subtitle}
+                            </p>
+                          )}
+                          {mediaProg && mediaProg.progressPercent > 0 && (
+                            <p className="text-[11px] font-mono tabular-nums text-[#146C43] dark:text-emerald-400 font-semibold">
+                              Progresso salvo: {mediaProg.progressPercent}%
+                            </p>
+                          )}
                           {pod.editalTopic && (
                             <p className="text-xs text-slate-600 dark:text-slate-400">
                               <span className="font-medium text-slate-700 dark:text-slate-300">Assunto:</span> {pod.editalTopic}
@@ -680,17 +750,37 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
                           {pod.description && (
                             <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{pod.description}</p>
                           )}
+                          {pod.chapters && pod.chapters.length > 0 && (
+                            <div className="pt-1 flex flex-wrap gap-1.5">
+                              {pod.chapters.slice(0, 4).map((ch) => (
+                                <button
+                                  key={ch.id}
+                                  type="button"
+                                  onClick={() => handleOpenPodcast(pod, ch.startSeconds)}
+                                  className="px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] text-slate-700 dark:text-slate-300 hover:border-[#146C43]"
+                                >
+                                  {ch.title}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-700">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => setActivePodcast(pod)}
+                              onClick={() => handleOpenPodcast(pod)}
                               className="min-h-[36px] px-3 py-1.5 bg-[#0B3321] hover:bg-[#134b32] text-white text-xs font-semibold rounded-lg inline-flex items-center gap-1.5"
                             >
                               <Play className="w-3.5 h-3.5" />
-                              <span>{isPlaying ? 'No tocador' : 'Ouvir agora'}</span>
+                              <span>
+                                {isPlaying
+                                  ? 'No tocador'
+                                  : mediaProg && mediaProg.currentTimeSeconds > 0
+                                    ? 'Continuar áudio'
+                                    : 'Ouvir agora'}
+                              </span>
                             </button>
 
                             <a
@@ -704,19 +794,32 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
                             </a>
                           </div>
 
-                          {canDelete && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (activePodcast?.id === pod.id) setActivePodcast(null);
-                                void deleteMaterial(pod.id);
-                              }}
-                              aria-label="Excluir podcast"
-                              className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {canOrganize && (
+                              <button
+                                type="button"
+                                onClick={() => setOrganizingPodcast(pod)}
+                                aria-label="Organizar capítulos e metadados"
+                                className="min-h-[36px] px-2.5 flex items-center justify-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B3321] dark:text-emerald-300 hover:bg-white dark:hover:bg-slate-900"
+                              >
+                                <SlidersHorizontal className="w-3.5 h-3.5" />
+                                <span>Organizar</span>
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (activePodcast?.id === pod.id) setActivePodcast(null);
+                                  void deleteMaterial(pod.id);
+                                }}
+                                aria-label="Excluir podcast"
+                                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </article>
                     );
@@ -727,6 +830,33 @@ export function PodcastsView({ campus }: { campus: CampusLevel }) {
           );
         })}
       </div>
+
+      {playbackChoiceTarget && (
+        <PlaybackChoiceModal
+          material={playbackChoiceTarget.material}
+          currentPreference={preferences.mediaPlaybackPreference || 'ask'}
+          onChooseInternal={(savePref) => handlePlaybackChoice('internal', savePref)}
+          onChooseExternal={(savePref) => handlePlaybackChoice('external', savePref)}
+          onClose={() => setPlaybackChoiceTarget(null)}
+        />
+      )}
+
+      {modalPlayer && (
+        <MediaPlaybackModal
+          material={modalPlayer.material}
+          initialMode={modalPlayer.mode}
+          initialStartSeconds={modalPlayer.startSeconds}
+          onClose={() => setModalPlayer(null)}
+        />
+      )}
+
+      {organizingPodcast && (
+        <ContentOrganizerModal
+          material={organizingPodcast}
+          campus={campus}
+          onClose={() => setOrganizingPodcast(null)}
+        />
+      )}
     </div>
   );
 }

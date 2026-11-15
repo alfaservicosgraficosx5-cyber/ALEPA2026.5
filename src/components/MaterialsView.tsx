@@ -24,6 +24,7 @@ import {
   RefreshCw,
   Scale,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   Upload,
@@ -32,6 +33,7 @@ import {
 } from 'lucide-react';
 import { YouTubeBrandIcon, extractYouTubeId } from './VideosView';
 import { BookReaderModal } from './BookReaderModal';
+import { ContentOrganizerModal } from './ContentOrganizerModal';
 import { useAuth } from '../contexts/AuthContext';
 import {
   CAMPUS_LIBRARY_RECOMMENDATIONS,
@@ -442,8 +444,10 @@ export function MaterialsView({
     }
   };
 
-  // Integrated Book Reader + File Viewer State
+  // Integrated Book Reader + Organizer + File Viewer State
   const [bookReaderMaterial, setBookReaderMaterial] = useState<StudyMaterial | null>(null);
+  const [bookReaderInitialPage, setBookReaderInitialPage] = useState<number | undefined>(undefined);
+  const [organizingMaterial, setOrganizingMaterial] = useState<StudyMaterial | null>(null);
   const [viewerMaterial, setViewerMaterial] = useState<StudyMaterial | null>(null);
   const [viewerLoading, setViewerLoading] = useState(false);
   const [viewerBlobUrl, setViewerBlobUrl] = useState<string | null>(null);
@@ -2092,7 +2096,9 @@ export function MaterialsView({
               mat.fileType === 'video' ||
               mat.resourceType === 'video' ||
               /instagram\.com|tiktok\.com|vimeo\.com/i.test(mat.url);
-            const canDelete = !mat.isSystemDefault && (isAdmin || mat.ownerId === (user?.uid || profile?.uid));
+            const uid = user?.uid || profile?.uid;
+            const canDelete = !mat.isSystemDefault && (isAdmin || mat.ownerId === uid);
+            const canOrganize = canPublishShared || (!mat.isSystemDefault && mat.ownerId === uid);
             const resLabel =
               ytId
                 ? 'YouTube'
@@ -2173,7 +2179,32 @@ export function MaterialsView({
                   )}
 
                   <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">{mat.title}</h2>
+                  {mat.subtitle && (
+                    <p className="text-xs font-medium text-[#146C43] dark:text-emerald-400">{mat.subtitle}</p>
+                  )}
                   {mat.description && <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2">{mat.description}</p>}
+                  {mat.chapters && mat.chapters.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {mat.chapters.slice(0, 4).map((ch) => (
+                        <button
+                          key={ch.id}
+                          type="button"
+                          onClick={() => {
+                            if (isPdfBook) {
+                              setBookReaderInitialPage(ch.startPage);
+                              setBookReaderMaterial(mat);
+                            } else {
+                              openViewer(mat);
+                            }
+                          }}
+                          className="px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-[11px] text-slate-700 dark:text-slate-300 hover:border-[#146C43]"
+                        >
+                          {ch.title}
+                          {ch.startPage ? ` (p. ${ch.startPage})` : ''}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   {(readingProgress || mat.pageCount || mat.textLayerStatus || !allowDownload || mat.version) && (
                     <div className="text-[11px] text-slate-600 dark:text-slate-300 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -2228,7 +2259,10 @@ export function MaterialsView({
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => openViewer(mat)}
+                      onClick={() => {
+                        setBookReaderInitialPage(undefined);
+                        openViewer(mat);
+                      }}
                       className="min-h-[40px] px-3.5 py-1.5 bg-[#0B3321] hover:bg-[#134b32] text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
                     >
                       {isVideoMat ? (
@@ -2290,16 +2324,29 @@ export function MaterialsView({
                       )}
                   </div>
 
-                  {canDelete && (
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(mat)}
-                      aria-label="Excluir material"
-                      className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-slate-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {canOrganize && (
+                      <button
+                        type="button"
+                        onClick={() => setOrganizingMaterial(mat)}
+                        aria-label="Organizar conteúdo e capítulos"
+                        className="min-h-[40px] px-2.5 flex items-center justify-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B3321] dark:text-emerald-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                      >
+                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                        <span>Organizar</span>
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(mat)}
+                        aria-label="Excluir material"
+                        className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-slate-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </article>
             );
@@ -3189,12 +3236,25 @@ export function MaterialsView({
       {bookReaderMaterial && (
         <BookReaderModal
           material={bookReaderMaterial}
-          onClose={() => setBookReaderMaterial(null)}
+          initialPage={bookReaderInitialPage}
+          onClose={() => {
+            setBookReaderMaterial(null);
+            setBookReaderInitialPage(undefined);
+          }}
           onSummarizeWithGemini={
             onSummarizeWithGemini
               ? (target) => onSummarizeWithGemini(target)
               : undefined
           }
+        />
+      )}
+
+      {organizingMaterial && (
+        <ContentOrganizerModal
+          material={organizingMaterial}
+          campus={campus}
+          onClose={() => setOrganizingMaterial(null)}
+          onSaved={() => setFeedback('Metadados e capítulos atualizados com sucesso.')}
         />
       )}
     </div>

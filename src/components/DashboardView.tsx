@@ -6,7 +6,9 @@ import {
   CalendarCheck,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   ClipboardList,
   Clock,
   ExternalLink,
@@ -14,6 +16,7 @@ import {
   GraduationCap,
   Layers,
   Lightbulb,
+  MessageSquare,
   Play,
   RotateCcw,
   Sparkles,
@@ -109,6 +112,7 @@ export function DashboardView({
   } = useAuth();
 
   const [readerMaterial, setReaderMaterial] = useState<StudyMaterial | null>(null);
+  const [academicCardExpanded, setAcademicCardExpanded] = useState<boolean>(false);
 
   const hiddenCardsSet = React.useMemo(
     () => new Set(preferences.hiddenDashboardCards || []),
@@ -403,6 +407,14 @@ export function DashboardView({
       onClick: () => onNavigate('gemini'),
     },
     {
+      id: 'requests',
+      label: 'Solicitações Acadêmicas',
+      subtitle: 'Pedir aulas, PDFs e tirar dúvidas',
+      metric: 'Atendimento',
+      icon: MessageSquare,
+      onClick: () => onNavigate('requests'),
+    },
+    {
       id: 'family',
       label: 'Acesso por Familiares',
       subtitle: isAdmin
@@ -423,130 +435,103 @@ export function DashboardView({
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
-      {/* Compact Header & Segmented Campus Switcher */}
-      <section className="space-y-3" style={{ order: -2 }}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] sm:text-xs font-semibold text-[#146C43] dark:text-emerald-400">
-              Meu Campus ALEPA · Fundação CETAP
-            </p>
-            <h1 className="font-display text-lg sm:text-2xl font-bold text-slate-900 dark:text-slate-100 truncate">
-              {isMedio ? `Nível Médio · ${activeMedioCargo.code}` : 'Nível Superior · PL.AL.102'}
-            </h1>
-          </div>
-          <a
-            href={MEDIO_CONCURSO_PROFILE.editalUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="min-h-[36px] px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-[#0B3321] dark:text-emerald-300 hover:border-[#0B3321] inline-flex items-center gap-1 whitespace-nowrap shrink-0"
-          >
-            <span>CETAP</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-
-        {/* Segmented Campus Switcher */}
-        <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-200/75 dark:bg-slate-800 rounded-2xl">
+      {/* Identificador Acadêmico Compacto (SEMPRE RECOLHIDO por padrão ao acessar Início) */}
+      <section aria-label="Identificador acadêmico ativo" style={{ order: -2 }}>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
           <button
             type="button"
-            onClick={() => onChangeCampus('superior')}
-            className={`min-h-[48px] px-3 py-2 rounded-xl text-left transition-all flex items-center gap-2.5 ${
-              campus === 'superior'
-                ? 'bg-[#0B3321] text-white shadow-xs'
-                : 'text-slate-700 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
-            }`}
+            aria-expanded={academicCardExpanded}
+            onClick={() => setAcademicCardExpanded((prev) => !prev)}
+            className="w-full min-h-[46px] px-3.5 py-2.5 flex items-center justify-between gap-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
           >
-            <GraduationCap
-              className={`w-5 h-5 shrink-0 ${campus === 'superior' ? 'text-emerald-300' : 'text-[#146C43] dark:text-emerald-400'}`}
-            />
-            <div className="min-w-0">
-              <p className="text-xs sm:text-sm font-bold truncate">Nível Superior</p>
-              <p
-                className={`text-[10px] sm:text-xs font-mono truncate ${
-                  campus === 'superior' ? 'text-emerald-200' : 'text-slate-500 dark:text-slate-400'
-                }`}
-              >
-                Cargo 03 · PL.AL.102
-              </p>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-7 h-7 rounded-lg bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-300 flex items-center justify-center shrink-0">
+                {isMedio ? <Layers className="w-3.5 h-3.5" /> : <GraduationCap className="w-3.5 h-3.5" />}
+              </span>
+              <span className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                {isMedio
+                  ? `Campus 01 · Nível Médio · ${activeMedioCargo.cargoNumber} (${activeMedioCargo.code})`
+                  : 'Campus 02 · Nível Superior · Cargo 03 (PL.AL.102)'}
+              </span>
             </div>
+            {academicCardExpanded ? (
+              <ChevronUp className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+            )}
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              onChangeCampus('medio');
-              onChangeMedioCargoGroup('cargo_01_04');
-            }}
-            className={`min-h-[48px] px-3 py-2 rounded-xl text-left transition-all flex items-center gap-2.5 ${
-              campus === 'medio'
-                ? 'bg-[#0B3321] text-white shadow-xs'
-                : 'text-slate-700 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
-            }`}
-          >
-            <Layers
-              className={`w-5 h-5 shrink-0 ${campus === 'medio' ? 'text-emerald-300' : 'text-[#146C43] dark:text-emerald-400'}`}
-            />
-            <div className="min-w-0">
-              <p className="text-xs sm:text-sm font-bold truncate">Nível Médio</p>
-              <p
-                className={`text-[10px] sm:text-xs font-mono truncate ${
-                  campus === 'medio' ? 'text-emerald-200' : 'text-slate-500 dark:text-slate-400'
-                }`}
-              >
-                Cargo 04 · PL.AL.060
-              </p>
-            </div>
-          </button>
-        </div>
+          {academicCardExpanded && (
+            <div className="px-3.5 pb-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-3 text-xs">
+              <dl className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-700 dark:text-slate-300">
+                <div>
+                  <dt className="text-[11px] text-slate-500 dark:text-slate-400">Campus</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-slate-100">
+                    {isMedio ? 'Campus 01' : 'Campus 02'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] text-slate-500 dark:text-slate-400">Edital</dt>
+                  <dd className="font-mono font-semibold text-slate-900 dark:text-slate-100">
+                    {isMedio ? MEDIO_CONCURSO_PROFILE.editalNumber : CONCURSO_PROFILE.editalNumber}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] text-slate-500 dark:text-slate-400">Cargo ativo</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                    {isMedio ? activeMedioCargoLabel : 'Analista Legislativo (PL.AL.102)'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] text-slate-500 dark:text-slate-400">Banca</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-slate-100">Fundação CETAP</dd>
+                </div>
+              </dl>
 
-        {/* Sub-selector de cargos Nível Médio */}
-        {isMedio && (
-          <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-2 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-0.5">
-            {MEDIO_CARGOS.map((cargo) => {
-              const selected = medioCargoGroup === cargo.group;
-              return (
+              <div className="flex flex-wrap items-center gap-2">
                 <button
-                  key={cargo.code}
                   type="button"
-                  onClick={() => onChangeMedioCargoGroup(cargo.group)}
-                  className={`snap-start min-w-[205px] sm:min-w-0 shrink-0 text-left p-2.5 sm:p-3 rounded-xl border text-xs transition-colors ${
-                    selected
-                      ? 'border-[#146C43] bg-emerald-50 dark:bg-emerald-950/60 text-slate-900 dark:text-slate-100'
-                      : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-300'
-                  }`}
+                  onClick={() => onNavigate('settings')}
+                  className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#0B3321] hover:bg-[#146C43] text-white font-semibold"
                 >
-                  <p className="font-mono font-bold text-[#0B3321] dark:text-emerald-300">
-                    {cargo.cargoNumber} · {cargo.code}
-                  </p>
-                  <p className="font-semibold truncate mt-0.5">{cargo.shortTitle.replace(/^Cargo \d+ · /, '')}</p>
+                  Meu Perfil Acadêmico
                 </button>
-              );
-            })}
-          </div>
-        )}
+                <button
+                  type="button"
+                  onClick={() => onNavigate('requests')}
+                  className="min-h-[38px] px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold inline-flex items-center gap-1.5"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-[#146C43] dark:text-emerald-400" />
+                  <span>Solicitações</span>
+                </button>
+                <a
+                  href={MEDIO_CONCURSO_PROFILE.editalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-h-[38px] px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold inline-flex items-center gap-1"
+                >
+                  <span>Portal CETAP</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Active Campus Deep Forest Green Hero Card with Instant Action */}
       {isCardVisible('hero') && (
-      <section className="bg-[#0B3321] text-white rounded-2xl p-4 sm:p-7 space-y-4" style={getCardOrderStyle('hero')}>
+      <section className="bg-[#0B3321] text-white rounded-2xl p-4 sm:p-6 space-y-4" style={getCardOrderStyle('hero')}>
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1 min-w-0">
             <p className="text-[11px] sm:text-xs font-medium text-emerald-300">
-              {isMedio
-                ? `${MEDIO_CONCURSO_PROFILE.editalNumber} · ${activeMedioCargo.cargoNumber}`
-                : `${CONCURSO_PROFILE.editalNumber} · Cargo 03`}{' '}
-              · {formatRoleLabel(effectiveRole)}
+              Meu Campus ALEPA · {formatRoleLabel(effectiveRole)}
             </p>
-            <h2 className="font-display text-xl sm:text-3xl font-bold text-white leading-tight">
+            <h2 className="font-display text-lg sm:text-2xl font-bold text-white leading-tight truncate">
               {isMedio
-                ? `ALEPA 2026 – Nível Médio (${activeMedioCargo.code})`
-                : 'ALEPA 2026 – Nível Superior (PL.AL.102)'}
+                ? `Preparação Nível Médio · ${activeMedioCargo.cargoNumber}`
+                : 'Preparação Nível Superior · Cargo 03'}
             </h2>
-            <p className="text-xs sm:text-sm text-emerald-100/85 truncate">
-              {isMedio
-                ? `${activeMedioCargoLabel} · R$ 2.295,22`
-                : `Assessoramento Legislativo – Técnico Legislativo (${CONCURSO_PROFILE.code})`}
-            </p>
           </div>
           <div className="text-right shrink-0 bg-white/10 border border-white/15 rounded-xl px-3 py-2">
             <p className="font-mono text-lg sm:text-2xl font-bold text-white tabular-nums leading-none">

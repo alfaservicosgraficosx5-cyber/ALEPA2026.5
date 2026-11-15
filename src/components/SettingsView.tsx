@@ -7,22 +7,35 @@ import {
   Cloud,
   Eye,
   EyeOff,
+  GraduationCap,
   Heart,
+  Layers,
   LogIn,
   LogOut,
   Palette,
+  Play,
   RefreshCw,
   Smartphone,
   UserCheck,
 } from 'lucide-react';
 import { DEFAULT_STUDENT_PREFERENCES, useAuth } from '../contexts/AuthContext';
+import { MEDIO_CARGOS } from '../data/alepaMedioSyllabus';
 import { CONCURSO_PROFILE } from '../data/alepaSyllabus';
-import { CampusLevel, NavSection, SpacedRepetitionConfig, StudentPreferences } from '../types';
+import {
+  CampusLevel,
+  MediaPlaybackPreference,
+  MedioCargoGroup,
+  NavSection,
+  SpacedRepetitionConfig,
+  StudentPreferences,
+} from '../types';
 import {
   SPACED_REPETITION_PRESETS,
   loadSpacedRepetitionConfig,
   saveSpacedRepetitionConfig,
 } from '../utils/mediaUrls';
+import { PWAInstallButton } from './PWAInstallButton';
+import { ShareAppButton } from './ShareAppModal';
 import { PageHeader, SectionCard } from './ui/CampusPrimitives';
 
 const DASHBOARD_CARD_LABELS: Record<string, string> = {
@@ -38,10 +51,14 @@ const DASHBOARD_CARD_LABELS: Record<string, string> = {
 export function SettingsView({
   campus,
   onChangeCampus,
+  medioCargoGroup = 'cargo_01_04',
+  onChangeMedioCargoGroup,
   onNavigate,
 }: {
   campus: CampusLevel;
   onChangeCampus: (campus: CampusLevel) => void;
+  medioCargoGroup?: MedioCargoGroup;
+  onChangeMedioCargoGroup?: (group: MedioCargoGroup) => void;
   onNavigate: (section: NavSection) => void;
 }) {
   const {
@@ -91,6 +108,23 @@ export function SettingsView({
     }
   };
 
+  const handleSelectCampusProfile = (nextCampus: CampusLevel) => {
+    onChangeCampus(nextCampus);
+    void handleUpdateVisualPref(
+      { preferredCampus: nextCampus },
+      `Perfil acadêmico atualizado para ${nextCampus === 'medio' ? 'Nível Médio (001/2026)' : 'Nível Superior (002/2026)'}. Todo o seu histórico anterior foi preservado.`
+    );
+  };
+
+  const handleSelectMedioCargoProfile = (group: MedioCargoGroup) => {
+    onChangeMedioCargoGroup?.(group);
+    const cargoInfo = MEDIO_CARGOS.find((c) => c.group === group);
+    void handleUpdateVisualPref(
+      { preferredCampus: 'medio', preferredMedioCargo: group },
+      `Cargo do Nível Médio atualizado para ${cargoInfo ? `${cargoInfo.cargoNumber} (${cargoInfo.code})` : group}. Histórico geral preservado.`
+    );
+  };
+
   const handleChangeSpacedPreset = (preset: SpacedRepetitionConfig['preset']) => {
     const next: SpacedRepetitionConfig = {
       preset,
@@ -135,9 +169,9 @@ export function SettingsView({
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Preferências do Estudante & Conta"
+        eyebrow="Meu Perfil Acadêmico & Preferências"
         title="Configurações & Personalização"
-        subtitle="Personalize aparência, tamanho da fonte, blocos do painel inicial, meta diária, revisão espaçada e sincronização entre dispositivos."
+        subtitle="Defina seu nível acadêmico, cargo do edital, player mobile, aparência, meta diária e sincronização entre dispositivos sem apagar seu histórico."
       />
 
       {feedback && (
@@ -151,6 +185,146 @@ export function SettingsView({
           {errorMsg}
         </div>
       )}
+
+      {/* Meu Perfil Acadêmico + Preferência de Player Mobile */}
+      <SectionCard
+        title="Meu Perfil Acadêmico (Nível e Cargo do Edital)"
+        subtitle="A alteração do nível ou cargo adapta os conteúdos sem apagar suas sessões, simulados ou histórico anterior"
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => handleSelectCampusProfile('superior')}
+              className={`min-h-[56px] p-4 rounded-xl border text-left transition-colors flex items-start gap-3 ${
+                campus === 'superior'
+                  ? 'bg-[#0B3321] text-white border-[#0B3321]'
+                  : 'bg-slate-50/70 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100'
+              }`}
+            >
+              <GraduationCap
+                className={`w-5 h-5 shrink-0 mt-0.5 ${
+                  campus === 'superior' ? 'text-emerald-300' : 'text-[#146C43] dark:text-emerald-400'
+                }`}
+              />
+              <div>
+                <p className="text-sm font-bold">Nível Superior · Edital 002/2026</p>
+                <p
+                  className={`text-xs mt-0.5 ${
+                    campus === 'superior' ? 'text-emerald-100/85' : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  Cargo 03 – Analista Legislativo / Administração (PL.AL.102)
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectCampusProfile('medio')}
+              className={`min-h-[56px] p-4 rounded-xl border text-left transition-colors flex items-start gap-3 ${
+                campus === 'medio'
+                  ? 'bg-[#0B3321] text-white border-[#0B3321]'
+                  : 'bg-slate-50/70 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100'
+              }`}
+            >
+              <Layers
+                className={`w-5 h-5 shrink-0 mt-0.5 ${
+                  campus === 'medio' ? 'text-emerald-300' : 'text-[#146C43] dark:text-emerald-400'
+                }`}
+              />
+              <div>
+                <p className="text-sm font-bold">Nível Médio · Edital 001/2026</p>
+                <p
+                  className={`text-xs mt-0.5 ${
+                    campus === 'medio' ? 'text-emerald-100/85' : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  Auxiliar Técnico Legislativo (Cargos 01 a 04 · PL.AL.060)
+                </p>
+              </div>
+            </button>
+          </div>
+
+          {campus === 'medio' && (
+            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Cargo específico do Nível Médio (Edital 001/2026):
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                {MEDIO_CARGOS.map((cargo) => {
+                  const selected = medioCargoGroup === cargo.group;
+                  return (
+                    <button
+                      key={cargo.code}
+                      type="button"
+                      onClick={() => handleSelectMedioCargoProfile(cargo.group)}
+                      className={`min-h-[48px] p-3 rounded-xl border text-left text-xs transition-colors ${
+                        selected
+                          ? 'bg-[#E8F3EC] dark:bg-emerald-950/50 border-[#146C43] text-[#0B3321] dark:text-emerald-200 font-bold'
+                          : 'bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <p className="font-mono text-[11px] font-bold">
+                        {cargo.cargoNumber} · {cargo.code}
+                      </p>
+                      <p className="truncate mt-0.5">{cargo.shortTitle.replace(/^Cargo \d+ · /, '')}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Media playback preference */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Play className="w-3.5 h-3.5 text-[#146C43] dark:text-emerald-400" />
+              <span>Reprodução de Vídeos e Podcasts no Celular</span>
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {(
+                [
+                  { id: 'ask', label: 'Perguntar sempre', desc: 'Escolher ao abrir cada conteúdo' },
+                  { id: 'internal', label: 'Preferir player interno', desc: 'Abrir direto no Meu Campus' },
+                  { id: 'external', label: 'Preferir aplicativo externo', desc: 'Encaminhar para YouTube/Spotify' },
+                ] as Array<{ id: MediaPlaybackPreference; label: string; desc: string }>
+              ).map((opt) => {
+                const active = (preferences.mediaPlaybackPreference || 'ask') === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() =>
+                      void handleUpdateVisualPref(
+                        { mediaPlaybackPreference: opt.id },
+                        `Preferência de reprodução definida para: ${opt.label}.`
+                      )
+                    }
+                    className={`min-h-[48px] p-3 rounded-xl border text-left transition-colors ${
+                      active
+                        ? 'bg-[#0B3321] text-white border-[#0B3321]'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                    }`}
+                  >
+                    <p className="text-xs font-bold">{opt.label}</p>
+                    <p className={`text-[11px] mt-0.5 ${active ? 'text-emerald-100/80' : 'text-slate-500 dark:text-slate-400'}`}>
+                      {opt.desc}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-2.5">
+            <ShareAppButton variant="card" />
+            <div className="w-full sm:w-auto sm:min-w-[200px]">
+              <PWAInstallButton variant="auth" />
+            </div>
+          </div>
+        </div>
+      </SectionCard>
 
       {/* Personalização Visual & Painel */}
       <SectionCard

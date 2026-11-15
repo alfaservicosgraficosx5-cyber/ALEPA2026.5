@@ -45,6 +45,10 @@ import { EXTRA_CURATED_QUESTIONS } from '../data/alepaExtraQuestions';
 import { GERAL_DEFAULT_MATERIALS } from '../data/alepaGeneralLibrary';
 import { MEDIO_DEFAULT_MATERIALS, MEDIO_QUESTIONS } from '../data/alepaMedioLibrary';
 import {
+  AcademicRequest,
+  AcademicRequestCategory,
+  AcademicRequestMessage,
+  AcademicRequestStatus,
   AccessSession,
   Activity,
   ActivitySubmission,
@@ -65,8 +69,11 @@ import {
   LinkStatus,
   ManagedDiscipline,
   ManagedTopic,
+  MaterialChapter,
   MaterialFileType,
   MaterialRelevanceTier,
+  MediaPlaybackPreference,
+  MediaProgressRecord,
   MedioCargoGroup,
   NormalizedUserRole,
   PlatformNotice,
@@ -119,6 +126,9 @@ export const DEFAULT_STUDENT_PREFERENCES: StudentPreferences = {
   favoriteQuestionIds: [],
   favoriteTopicIds: [],
   customShortcuts: [],
+  preferredCampus: 'superior',
+  preferredMedioCargo: 'cargo_01_04',
+  mediaPlaybackPreference: 'ask',
 };
 
 interface AuthContextValue {
@@ -165,6 +175,8 @@ interface AuthContextValue {
   topicProgressMap: Record<string, TopicProgress>;
   disciplineGoalsMap: Record<string, DisciplineWeeklyGoal>;
   readingProgressMap: Record<string, ReadingProgress>;
+  mediaProgressMap: Record<string, MediaProgressRecord>;
+  academicRequests: AcademicRequest[];
   studySessions: StudySession[];
   simuladoAttempts: SimuladoAttempt[];
   errorNotebook: ErrorEntry[];
@@ -224,6 +236,32 @@ interface AuthContextValue {
     patch: Partial<Omit<ReadingProgress, 'materialId' | 'userId' | 'updatedAt'>>
   ) => Promise<void>;
   deleteReadingProgress: (materialId: string) => Promise<void>;
+  saveMediaProgress: (
+    mediaId: string,
+    patch: Partial<Omit<MediaProgressRecord, 'mediaId' | 'userId' | 'updatedAt'>> & {
+      materialTitle: string;
+      mediaType: 'video' | 'audio';
+    }
+  ) => Promise<void>;
+  createAcademicRequest: (input: {
+    category: AcademicRequestCategory;
+    subject: string;
+    description: string;
+    disciplineId: string;
+    topicTitle?: string;
+    campusLevel?: LibraryScope;
+  }) => Promise<string>;
+  subscribeAcademicRequestMessages: (
+    requestId: string,
+    onUpdate: (messages: AcademicRequestMessage[]) => void,
+    onError?: (err: Error) => void
+  ) => () => void;
+  sendAcademicRequestMessage: (requestId: string, body: string) => Promise<void>;
+  updateAcademicRequestStatus: (requestId: string, status: AcademicRequestStatus) => Promise<void>;
+  assignAcademicRequest: (
+    requestId: string,
+    assignee: { uid: string; displayName: string; role: 'teacher' | 'editor' | 'admin' }
+  ) => Promise<void>;
   logStudySession: (input: {
     dateKey: string;
     disciplineId: string;
@@ -258,6 +296,7 @@ interface AuthContextValue {
   deleteErrorEntry: (entryId: string) => Promise<void>;
   addMaterial: (input: {
     title: string;
+    subtitle?: string;
     disciplineId: string;
     libraryCategoryId?: LibraryCategoryId;
     editalTopic?: string;
@@ -291,11 +330,15 @@ interface AuthContextValue {
     fileSizeBytes?: number;
     version?: number;
     versionNote?: string;
+    chapters?: MaterialChapter[];
+    studyRecommendations?: string[];
     sections?: StudyMaterial['sections'];
     parentMaterialId?: string;
     startPage?: number;
     endPage?: number;
     isVirtualSection?: boolean;
+    organizedBy?: string;
+    organizedAt?: string;
   }) => Promise<void>;
   updateMaterial: (
     materialId: string,
@@ -560,6 +603,7 @@ interface GuestStoreData {
   topicProgressMap: Record<string, TopicProgress>;
   disciplineGoalsMap: Record<string, DisciplineWeeklyGoal>;
   readingProgressMap: Record<string, ReadingProgress>;
+  mediaProgressMap: Record<string, MediaProgressRecord>;
   studySessions: StudySession[];
   simuladoAttempts: SimuladoAttempt[];
   errorNotebook: ErrorEntry[];
@@ -585,6 +629,7 @@ function loadGuestStore(): GuestStoreData {
     topicProgressMap: {},
     disciplineGoalsMap: {},
     readingProgressMap: {},
+    mediaProgressMap: {},
     studySessions: [],
     simuladoAttempts: [],
     errorNotebook: [],
@@ -600,6 +645,7 @@ function loadGuestStore(): GuestStoreData {
       topicProgressMap: parsed.topicProgressMap || {},
       disciplineGoalsMap: parsed.disciplineGoalsMap || {},
       readingProgressMap: parsed.readingProgressMap || {},
+      mediaProgressMap: parsed.mediaProgressMap || {},
       studySessions: Array.isArray(parsed.studySessions) ? parsed.studySessions : [],
       simuladoAttempts: Array.isArray(parsed.simuladoAttempts) ? parsed.simuladoAttempts : [],
       errorNotebook: Array.isArray(parsed.errorNotebook) ? parsed.errorNotebook : [],
@@ -639,6 +685,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [topicProgressMap, setTopicProgressMap] = useState<Record<string, TopicProgress>>({});
   const [disciplineGoalsMap, setDisciplineGoalsMap] = useState<Record<string, DisciplineWeeklyGoal>>({});
   const [readingProgressMap, setReadingProgressMap] = useState<Record<string, ReadingProgress>>({});
+  const [mediaProgressMap, setMediaProgressMap] = useState<Record<string, MediaProgressRecord>>({});
+  const [academicRequests, setAcademicRequests] = useState<AcademicRequest[]>([]);
   const [studySessions, setStudySessions] = useState<StudySession[]>([]);
   const [simuladoAttempts, setSimuladoAttempts] = useState<SimuladoAttempt[]>([]);
   const [errorNotebook, setErrorNotebook] = useState<ErrorEntry[]>([]);
@@ -756,6 +804,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setTopicProgressMap(data.topicProgressMap);
     setDisciplineGoalsMap(data.disciplineGoalsMap);
     setReadingProgressMap(data.readingProgressMap);
+    setMediaProgressMap(data.mediaProgressMap);
+    setAcademicRequests([]);
     setStudySessions(data.studySessions);
     setSimuladoAttempts(data.simuladoAttempts);
     setErrorNotebook(data.errorNotebook);
@@ -771,6 +821,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setTopicProgressMap(next.topicProgressMap);
     setDisciplineGoalsMap(next.disciplineGoalsMap);
     setReadingProgressMap(next.readingProgressMap);
+    setMediaProgressMap(next.mediaProgressMap);
     setStudySessions(next.studySessions);
     setSimuladoAttempts(next.simuladoAttempts);
     setErrorNotebook(next.errorNotebook);
@@ -805,6 +856,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setTopicProgressMap({});
           setDisciplineGoalsMap({});
           setReadingProgressMap({});
+          setMediaProgressMap({});
+          setAcademicRequests([]);
           setStudySessions([]);
           setSimuladoAttempts([]);
           setErrorNotebook([]);
@@ -934,6 +987,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setReadingProgressMap(next);
         },
         (err) => handleFirestoreError(err, OperationType.LIST, `users/${uid}/readingProgress`)
+      )
+    );
+
+    unsubs.push(
+      onSnapshot(
+        collection(db, 'users', uid, 'mediaProgress'),
+        (snap) => {
+          const next: Record<string, MediaProgressRecord> = {};
+          snap.forEach((docSnap) => {
+            next[docSnap.id] = docSnap.data() as MediaProgressRecord;
+          });
+          setMediaProgressMap(next);
+        },
+        () => {}
+      )
+    );
+
+    unsubs.push(
+      onSnapshot(
+        canAccessAdminPanel || canAccessTeacherPanel
+          ? query(collection(db, 'academicRequests'), limit(150))
+          : query(collection(db, 'academicRequests'), where('studentId', '==', uid), limit(100)),
+        (snap) => {
+          const items = snap.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<AcademicRequest, 'id'>),
+          }));
+          items.sort((a, b) => {
+            const ta = (a.updatedAt as { toMillis?: () => number })?.toMillis?.() ?? 0;
+            const tb = (b.updatedAt as { toMillis?: () => number })?.toMillis?.() ?? 0;
+            return tb - ta;
+          });
+          setAcademicRequests(items);
+        },
+        () => {}
       )
     );
 
@@ -2584,6 +2672,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addMaterial = async (input: {
     title: string;
+    subtitle?: string;
     disciplineId: string;
     libraryCategoryId?: LibraryCategoryId;
     editalTopic?: string;
@@ -2617,11 +2706,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fileSizeBytes?: number;
     version?: number;
     versionNote?: string;
+    chapters?: MaterialChapter[];
+    studyRecommendations?: string[];
     sections?: PdfVirtualSection[];
     parentMaterialId?: string;
     startPage?: number;
     endPage?: number;
     isVirtualSection?: boolean;
+    organizedBy?: string;
+    organizedAt?: string;
   }) => {
     const materialId = sanitizeId(`mat_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
     const todayIso = addDaysIso(0);
@@ -2631,6 +2724,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         id: materialId,
         ownerId: GUEST_UID,
         title: input.title.trim().slice(0, 200),
+        subtitle: input.subtitle?.trim().slice(0, 300),
         disciplineId: input.disciplineId.slice(0, 80),
         libraryCategoryId: input.libraryCategoryId,
         editalTopic: input.editalTopic?.trim().slice(0, 240),
@@ -2647,18 +2741,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         campusLevel: input.campusLevel,
         status: 'draft',
         fileName: (input.fileName || '').slice(0, 240),
-        description: (input.description || '').slice(0, 1000),
+        description: (input.description || '').slice(0, 2000),
         allowDownload: input.allowDownload ?? true,
         textLayerStatus: input.textLayerStatus,
         pageCount: input.pageCount,
         fileSizeBytes: input.fileSizeBytes,
         version: input.version ?? 1,
         versionNote: input.versionNote?.slice(0, 300),
+        chapters: input.chapters,
+        studyRecommendations: input.studyRecommendations,
         sections: input.sections,
         parentMaterialId: input.parentMaterialId,
         startPage: input.startPage,
         endPage: input.endPage,
         isVirtualSection: input.isVirtualSection,
+        organizedBy: input.organizedBy,
+        organizedAt: input.organizedAt,
         isShared: false,
       };
       persistGuestPatch((prev) => ({
@@ -2684,13 +2782,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fileType: input.fileType,
         url: input.url.trim().slice(0, 2000),
         fileName: (input.fileName || '').slice(0, 240),
-        description: (input.description || '').slice(0, 1000),
+        description: (input.description || '').slice(0, 2000),
         isShared: canShare,
         status: resolvedStatus,
         updatedBy: current.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
+      if (input.subtitle) payload.subtitle = input.subtitle.trim().slice(0, 300);
       if (input.libraryCategoryId) payload.libraryCategoryId = input.libraryCategoryId.slice(0, 80);
       if (input.editalTopic) payload.editalTopic = input.editalTopic.trim().slice(0, 240);
       if (input.resourceType) payload.resourceType = input.resourceType;
@@ -2709,11 +2808,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (input.storageProvider) payload.storageProvider = input.storageProvider;
       if (input.storagePath) payload.storagePath = input.storagePath.trim().slice(0, 500);
       if (input.reviewNotes) payload.reviewNotes = input.reviewNotes.trim().slice(0, 600);
-      if (input.sections?.length) payload.sections = input.sections;
+      if (input.chapters?.length) payload.chapters = input.chapters.slice(0, 120);
+      if (input.studyRecommendations?.length) {
+        payload.studyRecommendations = input.studyRecommendations.map((s) => s.trim()).filter(Boolean).slice(0, 30);
+      }
+      if (input.sections?.length) payload.sections = input.sections.slice(0, 40);
       if (input.parentMaterialId) payload.parentMaterialId = input.parentMaterialId;
       if (input.startPage !== undefined) payload.startPage = input.startPage;
       if (input.endPage !== undefined) payload.endPage = input.endPage;
       if (input.isVirtualSection !== undefined) payload.isVirtualSection = Boolean(input.isVirtualSection);
+      if (input.organizedBy) payload.organizedBy = input.organizedBy.slice(0, 128);
+      if (input.organizedAt) payload.organizedAt = input.organizedAt.slice(0, 40);
       payload.publishedAt = (input.publishedAt || todayIso).slice(0, 20);
       payload.lastVerifiedAt = (input.lastVerifiedAt || todayIso).slice(0, 20);
       if (input.linkStatus) payload.linkStatus = input.linkStatus;
@@ -2761,6 +2866,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
       if (canAccessAdminPanel) updates.updatedBy = current.uid;
       if (patch.title !== undefined) updates.title = patch.title.trim().slice(0, 200);
+      if (patch.subtitle !== undefined) updates.subtitle = patch.subtitle.trim().slice(0, 300);
       if (patch.disciplineId !== undefined) updates.disciplineId = patch.disciplineId.slice(0, 80);
       if (patch.libraryCategoryId !== undefined) updates.libraryCategoryId = patch.libraryCategoryId;
       if (patch.editalTopic !== undefined) updates.editalTopic = patch.editalTopic.trim().slice(0, 240);
@@ -2782,7 +2888,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (patch.storageProvider !== undefined) updates.storageProvider = patch.storageProvider;
       if (patch.storagePath !== undefined) updates.storagePath = patch.storagePath.trim().slice(0, 500);
       if (patch.reviewNotes !== undefined && canAccessAdminPanel) updates.reviewNotes = patch.reviewNotes.trim().slice(0, 600);
-      if (patch.description !== undefined) updates.description = patch.description.slice(0, 1000);
+      if (patch.description !== undefined) updates.description = patch.description.slice(0, 2000);
       if (patch.fileName !== undefined) updates.fileName = patch.fileName.slice(0, 240);
       if (patch.allowDownload !== undefined) updates.allowDownload = Boolean(patch.allowDownload);
       if (patch.textLayerStatus !== undefined) updates.textLayerStatus = patch.textLayerStatus;
@@ -2790,6 +2896,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (patch.fileSizeBytes !== undefined) updates.fileSizeBytes = Math.max(0, Math.min(500000000, Math.round(patch.fileSizeBytes)));
       if (patch.version !== undefined) updates.version = Math.max(1, Math.min(1000, Math.round(patch.version)));
       if (patch.versionNote !== undefined) updates.versionNote = patch.versionNote.trim().slice(0, 300);
+      if (patch.chapters !== undefined) updates.chapters = patch.chapters.slice(0, 120);
+      if (patch.studyRecommendations !== undefined) {
+        updates.studyRecommendations = patch.studyRecommendations.map((s) => s.trim()).filter(Boolean).slice(0, 30);
+      }
+      if (patch.sections !== undefined) updates.sections = patch.sections.slice(0, 40);
+      if (patch.parentMaterialId !== undefined) updates.parentMaterialId = patch.parentMaterialId.slice(0, 128);
+      if (patch.startPage !== undefined) updates.startPage = Math.max(1, Math.min(20000, Math.round(patch.startPage)));
+      if (patch.endPage !== undefined) updates.endPage = Math.max(1, Math.min(20000, Math.round(patch.endPage)));
+      if (patch.isVirtualSection !== undefined) updates.isVirtualSection = Boolean(patch.isVirtualSection);
+      if (patch.organizedBy !== undefined) updates.organizedBy = patch.organizedBy.slice(0, 128);
+      if (patch.organizedAt !== undefined) updates.organizedAt = patch.organizedAt.slice(0, 40);
       if (canPublishShared && patch.status !== undefined) {
         updates.status = patch.status;
         updates.isShared = patch.status === 'published';
@@ -3920,6 +4037,224 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const saveMediaProgress = async (
+    mediaId: string,
+    patch: Partial<Omit<MediaProgressRecord, 'mediaId' | 'userId' | 'updatedAt'>> & {
+      materialTitle: string;
+      mediaType: 'video' | 'audio';
+    }
+  ) => {
+    const safeId = sanitizeId(mediaId);
+    const existing = mediaProgressMap[safeId];
+    const currentTimeSeconds = Math.max(0, Math.min(86400, Number(patch.currentTimeSeconds ?? existing?.currentTimeSeconds ?? 0)));
+    const durationSeconds = Math.max(0, Math.min(86400, Number(patch.durationSeconds ?? existing?.durationSeconds ?? 0)));
+    const progressPercent =
+      patch.progressPercent !== undefined
+        ? Math.max(0, Math.min(100, Math.round(patch.progressPercent)))
+        : durationSeconds > 0
+          ? Math.max(0, Math.min(100, Math.round((currentTimeSeconds / durationSeconds) * 100)))
+          : existing?.progressPercent ?? 0;
+    const playbackRate = Math.max(0.5, Math.min(3.0, Number(patch.playbackRate ?? existing?.playbackRate ?? 1)));
+    const preferredMode: MediaPlaybackPreference = patch.preferredMode ?? existing?.preferredMode ?? preferences.mediaPlaybackPreference ?? 'ask';
+    const lastPlayedAt = (patch.lastPlayedAt ?? new Date().toISOString()).slice(0, 40);
+
+    if (isGuest && !auth.currentUser) {
+      const record: MediaProgressRecord = {
+        userId: GUEST_UID,
+        mediaId: safeId,
+        materialTitle: patch.materialTitle.trim().slice(0, 200) || 'Mídia ALEPA',
+        mediaType: patch.mediaType,
+        currentTimeSeconds,
+        durationSeconds,
+        progressPercent,
+        playbackRate,
+        preferredMode,
+        lastChapterId: patch.lastChapterId ?? existing?.lastChapterId,
+        openedExternallyAt: patch.openedExternallyAt ?? existing?.openedExternallyAt,
+        lastPlayedAt,
+      };
+      persistGuestPatch((prev) => ({
+        ...prev,
+        mediaProgressMap: { ...prev.mediaProgressMap, [safeId]: record },
+      }));
+      return;
+    }
+
+    const current = ensureSignedIn();
+    const path = `users/${current.uid}/mediaProgress/${safeId}`;
+    const payload: Record<string, unknown> = {
+      userId: current.uid,
+      mediaId: safeId,
+      materialTitle: patch.materialTitle.trim().slice(0, 200) || 'Mídia ALEPA',
+      mediaType: patch.mediaType,
+      currentTimeSeconds,
+      durationSeconds,
+      progressPercent,
+      playbackRate,
+      preferredMode,
+      lastPlayedAt,
+      updatedAt: serverTimestamp(),
+    };
+    const nextChapterId = patch.lastChapterId ?? existing?.lastChapterId;
+    if (nextChapterId) payload.lastChapterId = nextChapterId.slice(0, 128);
+    const nextExt = patch.openedExternallyAt ?? existing?.openedExternallyAt;
+    if (nextExt) payload.openedExternallyAt = nextExt.slice(0, 40);
+
+    try {
+      await setDoc(doc(db, 'users', current.uid, 'mediaProgress', safeId), payload);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, path);
+    }
+  };
+
+  const createAcademicRequest = async (input: {
+    category: AcademicRequestCategory;
+    subject: string;
+    description: string;
+    disciplineId: string;
+    topicTitle?: string;
+    campusLevel?: LibraryScope;
+  }): Promise<string> => {
+    const current = ensureSignedIn();
+    const requestId = sanitizeId(`req_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+    const path = `academicRequests/${requestId}`;
+    const payload: Record<string, unknown> = {
+      requestId,
+      studentId: current.uid,
+      studentName: (profile?.displayName || current.displayName || 'Estudante ALEPA').trim().slice(0, 120),
+      category: input.category,
+      subject: input.subject.trim().slice(0, 200),
+      description: input.description.trim().slice(0, 4000),
+      disciplineId: input.disciplineId.trim().slice(0, 80) || 'geral',
+      status: 'pendente',
+      lastMessagePreview: input.description.trim().slice(0, 300),
+      lastMessageByRole: 'student',
+      messageCount: 0,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+    if (current.email) payload.studentEmail = current.email.trim().toLowerCase().slice(0, 160);
+    if (input.topicTitle?.trim()) payload.topicTitle = input.topicTitle.trim().slice(0, 240);
+    if (input.campusLevel) payload.campusLevel = input.campusLevel;
+    try {
+      await setDoc(doc(db, 'academicRequests', requestId), payload);
+      return requestId;
+    } catch (err) {
+      setSyncError('Erro ao enviar solicitação acadêmica.');
+      handleFirestoreError(err, OperationType.CREATE, path);
+    }
+  };
+
+  const subscribeAcademicRequestMessages = useCallback(
+    (
+      requestId: string,
+      onUpdate: (messages: AcademicRequestMessage[]) => void,
+      onError?: (err: Error) => void
+    ) => {
+      const safeId = sanitizeId(requestId);
+      const q = query(
+        collection(db, 'academicRequests', safeId, 'messages'),
+        orderBy('createdAt', 'asc'),
+        limit(300)
+      );
+      return onSnapshot(
+        q,
+        (snap) => {
+          onUpdate(
+            snap.docs.map((d) => ({
+              id: d.id,
+              ...(d.data() as Omit<AcademicRequestMessage, 'id'>),
+            }))
+          );
+        },
+        (err) => {
+          if (onError) onError(err);
+        }
+      );
+    },
+    []
+  );
+
+  const sendAcademicRequestMessage = async (requestId: string, body: string) => {
+    const current = ensureSignedIn();
+    const safeReqId = sanitizeId(requestId);
+    const trimmed = body.trim().slice(0, 4000);
+    if (!trimmed) return;
+
+    const reqSnap = await getDoc(doc(db, 'academicRequests', safeReqId));
+    if (!reqSnap.exists()) {
+      throw new Error('Solicitação não encontrada.');
+    }
+    const reqData = reqSnap.data() as AcademicRequest;
+    const messageId = sanitizeId(`msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+    const senderRole: NormalizedUserRole = isAdmin
+      ? effectiveRole
+      : canAccessTeacherPanel
+        ? 'teacher'
+        : 'student';
+
+    const msgPayload: Record<string, unknown> = {
+      messageId,
+      requestId: safeReqId,
+      studentId: reqData.studentId,
+      senderId: current.uid,
+      senderName: (profile?.displayName || current.displayName || 'Participante').trim().slice(0, 120),
+      senderRole,
+      body: trimmed,
+      createdAt: serverTimestamp(),
+    };
+    if (reqData.assignedTeacherId) msgPayload.assignedTeacherId = reqData.assignedTeacherId;
+
+    await setDoc(doc(db, 'academicRequests', safeReqId, 'messages', messageId), msgPayload);
+
+    const nextStatus: AcademicRequestStatus =
+      senderRole === 'student'
+        ? reqData.status === 'concluida'
+          ? 'aguardando_resposta'
+          : reqData.status === 'respondida'
+            ? 'aguardando_resposta'
+            : reqData.status
+        : reqData.status === 'concluida'
+          ? 'concluida'
+          : 'respondida';
+
+    await updateDoc(doc(db, 'academicRequests', safeReqId), {
+      status: nextStatus,
+      lastMessagePreview: trimmed.slice(0, 300),
+      lastMessageByRole: senderRole,
+      messageCount: (reqData.messageCount || 0) + 1,
+      updatedAt: serverTimestamp(),
+    });
+  };
+
+  const updateAcademicRequestStatus = async (requestId: string, status: AcademicRequestStatus) => {
+    ensureSignedIn();
+    const safeReqId = sanitizeId(requestId);
+    await updateDoc(doc(db, 'academicRequests', safeReqId), {
+      status,
+      updatedAt: serverTimestamp(),
+    });
+  };
+
+  const assignAcademicRequest = async (
+    requestId: string,
+    assignee: { uid: string; displayName: string; role: 'teacher' | 'editor' | 'admin' }
+  ) => {
+    const current = ensureSignedIn();
+    if (!isAdmin && !canAccessAdminPanel) {
+      throw new Error('Apenas Administradores podem encaminhar solicitações.');
+    }
+    const safeReqId = sanitizeId(requestId);
+    await updateDoc(doc(db, 'academicRequests', safeReqId), {
+      assignedTeacherId: sanitizeId(assignee.uid),
+      assignedTeacherName: assignee.displayName.trim().slice(0, 120),
+      assignedRole: assignee.role,
+      forwardedBy: current.uid,
+      status: 'em_analise',
+      updatedAt: serverTimestamp(),
+    });
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -3961,6 +4296,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         topicProgressMap,
         disciplineGoalsMap,
         readingProgressMap,
+        mediaProgressMap,
+        academicRequests,
         studySessions,
         simuladoAttempts,
         errorNotebook,
@@ -4005,6 +4342,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         saveTopicProgress,
         saveReadingProgress,
         deleteReadingProgress,
+        saveMediaProgress,
+        createAcademicRequest,
+        subscribeAcademicRequestMessages,
+        sendAcademicRequestMessage,
+        updateAcademicRequestStatus,
+        assignAcademicRequest,
         logStudySession,
         saveSimuladoAttempt,
         addErrorEntry,

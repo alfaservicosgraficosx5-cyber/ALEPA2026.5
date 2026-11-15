@@ -8,8 +8,10 @@ import {
   GraduationCap,
   Layers,
   Loader2,
+  MessageSquare,
   Plus,
   Send,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   Users,
@@ -25,10 +27,13 @@ import {
   PublicationStatus,
   Question,
   QuestionDifficulty,
+  StudyMaterial,
 } from '../types';
+import { ContentOrganizerModal } from './ContentOrganizerModal';
+import { RequestsCenterView } from './RequestsCenterView';
 import { EmptyState, PageHeader, SectionCard, StatTile } from './ui/CampusPrimitives';
 
-type TeacherTab = 'dashboard' | 'classes' | 'lessons' | 'activities' | 'ai';
+type TeacherTab = 'dashboard' | 'classes' | 'lessons' | 'activities' | 'requests' | 'ai';
 
 export function TeacherConsoleView({
   campus,
@@ -133,6 +138,17 @@ export function TeacherConsoleView({
     [mySubmissions]
   );
 
+  const myManagedMaterials = useMemo(() => {
+    const assignedDiscs = new Set(profile?.assignedDisciplineIds || []);
+    return allManagedMaterials.filter((m) => {
+      if (isAdmin) return true;
+      if (m.ownerId === myUid) return true;
+      if (m.classId && myClassIds.has(m.classId)) return true;
+      if (assignedDiscs.size > 0 && assignedDiscs.has(m.disciplineId)) return true;
+      return false;
+    });
+  }, [allManagedMaterials, isAdmin, myUid, myClassIds, profile?.assignedDisciplineIds]);
+
   // --- Form states: Enrollment ---
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const activeClassId = selectedClassId || myClasses[0]?.id || '';
@@ -196,7 +212,10 @@ export function TeacherConsoleView({
   const [aiTopic, setAiTopic] = useState('');
   const [aiNotes, setAiNotes] = useState('');
   const [aiResult, setAiResult] = useState<string | null>(null);
+  const [aiLessonDraft, setAiLessonDraft] = useState<{ title?: string; summary?: string; content?: string } | null>(null);
+  const [aiDiscursiveDraft, setAiDiscursiveDraft] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [organizingMaterial, setOrganizingMaterial] = useState<StudyMaterial | null>(null);
 
   const resetFeedback = () => {
     setFeedback(null);
@@ -425,6 +444,8 @@ export function TeacherConsoleView({
     }
     resetFeedback();
     setAiLoading(true);
+    setAiLessonDraft(null);
+    setAiDiscursiveDraft(null);
     try {
       const token = await getIdToken();
       if (!token) {
@@ -441,7 +462,7 @@ export function TeacherConsoleView({
           campusLevel: campus,
           disciplineName: aiTopic.trim(),
           topicTitle: aiTopic.trim(),
-          notes:
+          contextText:
             aiAction === 'analyze_class_errors'
               ? `${aiNotes.trim()} | Erros registrados na base: ${errorNotebook
                   .slice(0, 8)
@@ -450,11 +471,55 @@ export function TeacherConsoleView({
               : aiNotes.trim(),
         }),
       });
-      const data = (await res.json()) as { text?: string; error?: string };
+      const data = (await res.json()) as {
+        text?: string;
+        draft?: { title?: string; summary?: string; content?: string };
+        questions?: Array<{
+          statement?: string;
+          options?: string[];
+          correctIndex?: number;
+          explanation?: string;
+          legalBasis?: string;
+        }>;
+        discursivePrompt?: string;
+        error?: string;
+      };
       if (!res.ok) {
         throw new Error(data.error || 'Falha no Assistente Docente IA.');
       }
-      setAiResult(data.text || '');
+      if (data.draft) {
+        setAiLessonDraft(data.draft);
+        const formatted = [
+          data.draft.title ? `# ${data.draft.title}` : '',
+          data.draft.summary ? `Resumo: ${data.draft.summary}` : '',
+          data.draft.content || '',
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+        setAiResult(formatted || data.text || '');
+      } else if (Array.isArray(data.questions) && data.questions.length > 0) {
+        if (typeof data.discursivePrompt === 'string' && data.discursivePrompt.trim()) {
+          setAiDiscursiveDraft(data.discursivePrompt.trim());
+        }
+        const letters = ['A', 'B', 'C', 'D', 'E'];
+        const formattedQuestions = data.questions
+          .map((q, idx) => {
+            const opts = (q.options || [])
+              .map((o, oi) => `  ${letters[oi] || oi + 1}) ${o}`)
+              .join('\n');
+            const corr = typeof q.correctIndex === 'number' ? letters[q.correctIndex] || 'A' : '?';
+            return `Questão ${idx + 1}: ${q.statement || ''}\n${opts}\nGabarito: ${corr}${
+              q.explanation ? `\nComentário: ${q.explanation}` : ''
+            }${q.legalBasis ? `\nBase legal: ${q.legalBasis}` : ''}`;
+          })
+          .join('\n\n---\n\n');
+        const fullText = data.discursivePrompt
+          ? `${formattedQuestions}\n\nProposta Discursiva:\n${data.discursivePrompt}`
+          : formattedQuestions;
+        setAiResult(fullText || data.text || '');
+      } else {
+        setAiResult(data.text || '');
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erro ao consultar Assistente IA.');
     } finally {
@@ -502,6 +567,7 @@ export function TeacherConsoleView({
             { id: 'classes', label: `Turmas & Alunos (${myClasses.length})`, icon: Users },
             { id: 'lessons', label: `Aulas & Materiais (${myLessons.length})`, icon: BookOpen },
             { id: 'activities', label: `Atividades & Correções (${pendingSubmissions.length})`, icon: ClipboardCheck },
+            { id: 'requests', label: 'Solicitações', icon: MessageSquare },
             { id: 'ai', label: 'Assistente IA Docente', icon: Sparkles },
           ] as const
         ).map((item) => {
@@ -855,7 +921,9 @@ export function TeacherConsoleView({
                     Vincular PDFs / Materiais da biblioteca ({lessonMaterialIds.length} selecionados)
                   </p>
                   <div className="max-h-36 overflow-y-auto space-y-1 border border-slate-200 dark:border-slate-800 rounded-xl p-2 bg-slate-50/50 dark:bg-slate-800/30">
-                    {allManagedMaterials.slice(0, 40).map((m) => {
+                    {(myManagedMaterials.length > 0 ? myManagedMaterials : allManagedMaterials)
+                      .slice(0, 40)
+                      .map((m) => {
                       const checked = lessonMaterialIds.includes(m.id);
                       return (
                         <label
@@ -944,9 +1012,10 @@ export function TeacherConsoleView({
                       className="min-h-[42px] px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100"
                     >
                       <option value="pdf">PDF</option>
-                      <option value="link">Link / Legislação</option>
+                      <option value="drive">Link / Legislação / Drive</option>
                       <option value="video">Vídeo</option>
-                      <option value="slides">Slides</option>
+                      <option value="pptx">Slides (PPTX)</option>
+                      <option value="xlsx">Planilha / Cronograma (XLSX)</option>
                     </select>
                   </div>
                   <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
@@ -963,9 +1032,47 @@ export function TeacherConsoleView({
                     className="min-h-[42px] px-4 py-2 rounded-xl bg-[#0B3321] hover:bg-[#146C43] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5"
                   >
                     <FileText className="w-4 h-4" />
-                    <span>Registrar material</span>
+                    <span>{matSubmitReview ? 'Enviar para revisão' : 'Salvar rascunho'}</span>
                   </button>
                 </form>
+              </SectionCard>
+
+              <SectionCard
+                title={`Materiais Sob Sua Autoria / Disciplina (${myManagedMaterials.length})`}
+                subtitle="Organize subtítulo, recomendações de estudo e capítulos antes de enviar para revisão"
+              >
+                {myManagedMaterials.length === 0 ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Nenhum material cadastrado no seu escopo docente ainda.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {myManagedMaterials.slice(0, 20).map((m) => (
+                      <div
+                        key={m.id}
+                        className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-2.5 flex items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
+                            {m.title}
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                            {disciplineNameMap[m.disciplineId] || m.disciplineId} · {m.status || 'draft'}
+                            {m.chapters?.length ? ` · ${m.chapters.length} cap.` : ''}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setOrganizingMaterial(m)}
+                          className="min-h-[34px] px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] font-semibold text-[#0B3321] dark:text-emerald-300 inline-flex items-center gap-1 shrink-0"
+                        >
+                          <SlidersHorizontal className="w-3.5 h-3.5" />
+                          <span>Organizar</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </SectionCard>
 
               <SectionCard title="Aulas Criadas" subtitle={`${myLessons.length} aula(s) registradas`}>
@@ -1385,7 +1492,10 @@ export function TeacherConsoleView({
         </div>
       )}
 
-      {/* TAB 5: TEACHER AI ASSISTANT */}
+      {/* TAB 5: SOLICITAÇÕES ACADÊMICAS */}
+      {tab === 'requests' && <RequestsCenterView campus={campus} mode="teacher" />}
+
+      {/* TAB 6: TEACHER AI ASSISTANT */}
       {tab === 'ai' && (
         <SectionCard
           title="Assistente Pedagógico IA do Professor"
@@ -1454,8 +1564,9 @@ export function TeacherConsoleView({
                   <button
                     type="button"
                     onClick={() => {
-                      setLessonTitle(aiTopic.trim());
-                      setLessonContent(aiResult);
+                      setLessonTitle(aiLessonDraft?.title?.trim() || aiTopic.trim());
+                      setLessonSummary(aiLessonDraft?.summary?.trim() || '');
+                      setLessonContent(aiLessonDraft?.content?.trim() || aiResult);
                       setLessonStatus('draft');
                       setTab('lessons');
                     }}
@@ -1465,6 +1576,22 @@ export function TeacherConsoleView({
                     <span>Enviar para editor de aula</span>
                   </button>
                 )}
+                {aiAction === 'draft_activity_questions' && aiDiscursiveDraft && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActPromptsText((prev) =>
+                        prev.trim() ? `${prev.trim()}\n${aiDiscursiveDraft}` : aiDiscursiveDraft
+                      );
+                      setActType('mista');
+                      setTab('activities');
+                    }}
+                    className="min-h-[36px] px-3 py-1.5 rounded-xl bg-[#0B3321] text-white text-xs font-semibold inline-flex items-center gap-1.5"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Usar discursiva na atividade</span>
+                  </button>
+                )}
               </div>
               <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-xs sm:text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">
                 {aiResult}
@@ -1472,6 +1599,17 @@ export function TeacherConsoleView({
             </div>
           )}
         </SectionCard>
+      )}
+
+      {organizingMaterial && (
+        <ContentOrganizerModal
+          material={organizingMaterial}
+          campus={campus}
+          onClose={() => setOrganizingMaterial(null)}
+          onSaved={() => {
+            setFeedback('Organização de conteúdo salva.');
+          }}
+        />
       )}
     </div>
   );

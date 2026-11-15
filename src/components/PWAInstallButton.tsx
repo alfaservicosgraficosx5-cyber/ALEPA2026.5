@@ -3,7 +3,7 @@ import { Download, MoreVertical, Share, Smartphone, WifiOff, X } from 'lucide-re
 import { useOnlineStatus, usePWAInstall } from '../hooks/usePWAInstall';
 
 interface PWAInstallButtonProps {
-  variant?: 'header' | 'auth';
+  variant?: 'header' | 'auth' | 'menu';
 }
 
 export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ variant = 'header' }) => {
@@ -36,7 +36,9 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ variant = 'h
   const buttonClass =
     variant === 'auth'
       ? 'w-full min-h-[44px] px-4 py-2.5 bg-slate-100 hover:bg-slate-200/80 border border-slate-300 text-slate-900 text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2'
-      : 'min-h-[38px] sm:min-h-[40px] px-2.5 sm:px-3 py-1.5 sm:py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[#0B3321] text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors';
+      : variant === 'menu'
+        ? 'min-h-[44px] w-full px-3.5 py-2.5 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800 text-[#0B3321] dark:text-emerald-200 text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors'
+        : 'min-h-[38px] sm:min-h-[40px] px-2.5 sm:px-3 py-1.5 sm:py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[#0B3321] text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors';
 
   return (
     <>

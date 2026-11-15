@@ -12,6 +12,7 @@ import {
   Loader2,
   ScanSearch,
   Send,
+  SlidersHorizontal,
   Sparkles,
   Upload,
   Video,
@@ -61,6 +62,7 @@ interface DocumentIntelligencePanelProps {
   onNotifyErr: (err: unknown, fallback: string) => void;
   onPreviewMaterial: (mat: Partial<StudyMaterial>) => void;
   onOpenBookReader: (mat: StudyMaterial) => void;
+  onOrganizeMaterial?: (mat: StudyMaterial) => void;
   callAdminAuthoring: (payload: {
     action: 'draft_material_summary' | 'draft_question' | 'draft_topic' | 'draft_notice';
     disciplineName?: string;
@@ -79,6 +81,7 @@ export function DocumentIntelligencePanel({
   onNotifyErr,
   onPreviewMaterial,
   onOpenBookReader,
+  onOrganizeMaterial,
   callAdminAuthoring,
 }: DocumentIntelligencePanelProps) {
   const {
@@ -1133,7 +1136,9 @@ export function DocumentIntelligencePanel({
                       {renderAdminStatusBadge(currentStatus)}
                     </div>
                     <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                      {m.subtitle ? `${m.subtitle} · ` : ''}
                       {m.campusLevel || 'geral'} · {m.resourceType || m.fileType} · {m.institution || 'Acervo'}
+                      {m.chapters?.length ? ` · ${m.chapters.length} cap.` : ''}
                       {m.version ? ` · v${m.version}` : ''}
                       {m.pageCount ? ` · ${m.pageCount} págs.` : ''}
                       {m.checksumSha256 ? ` · SHA ${m.checksumSha256.slice(0, 8)}` : ''}
@@ -1149,6 +1154,16 @@ export function DocumentIntelligencePanel({
                       >
                         <BookOpen className="h-3.5 w-3.5" />
                         Book Reader
+                      </button>
+                    )}
+                    {onOrganizeMaterial && (
+                      <button
+                        type="button"
+                        onClick={() => onOrganizeMaterial(m)}
+                        className="inline-flex min-h-[36px] items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50/70 px-2.5 text-xs font-semibold text-[#0B3321] hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+                      >
+                        <SlidersHorizontal className="h-3.5 w-3.5" />
+                        Organizar
                       </button>
                     )}
                     <button

@@ -10,6 +10,7 @@ import {
   HardDrive,
   Layers,
   Lock,
+  MessageSquare,
   Plus,
   Send,
   ShieldCheck,
@@ -46,6 +47,8 @@ import { DocumentIntelligencePanel } from './admin/DocumentIntelligencePanel';
 import { StorageCenterPanel } from './admin/StorageCenterPanel';
 import { UsersGovernancePanel } from './admin/UsersGovernancePanel';
 import { AuditReportsPanel } from './admin/AuditReportsPanel';
+import { ContentOrganizerModal } from './ContentOrganizerModal';
+import { RequestsCenterView } from './RequestsCenterView';
 
 type AdminSubTab =
   | 'estatisticas'
@@ -53,6 +56,7 @@ type AdminSubTab =
   | 'documentos'
   | 'questoes'
   | 'avisos'
+  | 'solicitacoes'
   | 'armazenamento'
   | 'usuarios';
 
@@ -97,6 +101,7 @@ export function AdminConsoleView({
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [backendCheckMsg, setBackendCheckMsg] = useState<string | null>(null);
   const [adminReaderPreview, setAdminReaderPreview] = useState<StudyMaterial | null>(null);
+  const [organizingMaterial, setOrganizingMaterial] = useState<StudyMaterial | null>(null);
 
   const [previewModal, setPreviewModal] = useState<
     | { kind: 'material'; item: Partial<StudyMaterial> }
@@ -416,6 +421,7 @@ export function AdminConsoleView({
     { id: 'documentos', label: 'Central de Documentos', icon: FolderOpen },
     { id: 'questoes', label: 'Questões & Simulados', icon: ClipboardList },
     { id: 'avisos', label: 'Avisos & Cronograma', icon: Bell },
+    { id: 'solicitacoes', label: 'Solicitações', icon: MessageSquare },
     {
       id: 'armazenamento',
       label: 'Armazenamento Nuvem',
@@ -568,9 +574,13 @@ export function AdminConsoleView({
           onNotifyErr={notifyErr}
           onPreviewMaterial={(mat) => setPreviewModal({ kind: 'material', item: mat })}
           onOpenBookReader={(mat) => setAdminReaderPreview(mat)}
+          onOrganizeMaterial={(mat) => setOrganizingMaterial(mat)}
           callAdminAuthoring={callAdminAuthoring}
         />
       )}
+
+      {/* TAB: SOLICITAÇÕES ACADÊMICAS (RESPOSTAS HUMANAS ADMIN/STAFF) */}
+      {subTab === 'solicitacoes' && <RequestsCenterView campus={campus} mode="admin" />}
 
       {/* TAB 4: QUESTÕES & SIMULADOS */}
       {subTab === 'questoes' && (
@@ -1400,6 +1410,15 @@ export function AdminConsoleView({
         <BookReaderModal
           material={adminReaderPreview}
           onClose={() => setAdminReaderPreview(null)}
+        />
+      )}
+
+      {organizingMaterial && (
+        <ContentOrganizerModal
+          material={organizingMaterial}
+          campus={campus}
+          onClose={() => setOrganizingMaterial(null)}
+          onSaved={() => notifyOk('Estrutura, subtítulo e recomendações do documento salvos.')}
         />
       )}
     </div>

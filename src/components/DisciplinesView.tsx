@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   BookOpen,
@@ -6,15 +6,32 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  ClipboardList,
   ExternalLink,
   FileEdit,
+  FileText,
   GraduationCap,
+  Headphones,
   Layers,
+  Play,
+  Sparkles,
+  Video,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { MEDIO_CARGOS, MEDIO_CONCURSO_PROFILE } from '../data/alepaMedioSyllabus';
-import { ADMIN_LEGISLATIVE_PRIORITIES, CONCURSO_PROFILE } from '../data/alepaSyllabus';
-import { CampusLevel, MedioCargoGroup, NavSection } from '../types';
+import { MEDIO_CARGOS, MEDIO_CONCURSO_PROFILE, isMedioDisciplineId } from '../data/alepaMedioSyllabus';
+import { CONCURSO_PROFILE } from '../data/alepaSyllabus';
+import {
+  CampusLevel,
+  Discipline,
+  MediaPlaybackPreference,
+  MedioCargoGroup,
+  NavSection,
+  StudyMaterial,
+  SyllabusTopic,
+} from '../types';
+import { BookReaderModal } from './BookReaderModal';
+import { MediaPlaybackModal } from './MediaPlaybackModal';
+import { PlaybackChoiceModal } from './PlaybackChoiceModal';
 
 interface DisciplinesViewProps {
   campus: CampusLevel;
@@ -33,14 +50,45 @@ export function DisciplinesView({
   onOpenStudyRoom,
   onNavigate,
 }: DisciplinesViewProps) {
-  const { topicProgressMap, saveTopicProgress, getCampusDisciplines } = useAuth();
+  const {
+    topicProgressMap,
+    saveTopicProgress,
+    getCampusDisciplines,
+    materials,
+    questions,
+    preferences,
+    updateStudentPreferences,
+    saveMediaProgress,
+  } = useAuth();
+
+  // Compact Academic Identifier (ALWAYS collapsed by default on access)
+  // 1) Compact identifier strip (`academicCardExpanded = false` default)
+  // 2) Single-expand Discipline accordion (`expandedDisciplineId`)
+  // 3) Dedicated progressive screen for a selected Topic (`focusedTarget`)
+  const [academicCardExpanded, setAcademicCardExpanded] = useState(false);
+  const [expandedDisciplineId, setExpandedDisciplineId] = useState<string | null>(null);
   const [blockFilter, setBlockFilter] = useState<string>('all');
-  const [selectedDisciplineId, setSelectedDisciplineId] = useState<string | null>(null);
   const [showExamDetails, setShowExamDetails] = useState(false);
-  const [expandedTopicId, setExpandedTopicId] = useState<string | null>(null);
+
+  const [focusedTarget, setFocusedTarget] = useState<{ disciplineId: string; topicId: string } | null>(null);
+  const savedScrollRef = useRef<number>(0);
+
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [savingTopicId, setSavingTopicId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Contextual media & PDF viewers inside focused Topic view
+  const [readerMaterial, setReaderMaterial] = useState<StudyMaterial | null>(null);
+  const [choiceMedia, setChoiceMedia] = useState<StudyMaterial | null>(null);
+  const [playingMedia, setPlayingMedia] = useState<{
+    material: StudyMaterial;
+    mode: 'internal' | 'external';
+  } | null>(null);
+
+  useEffect(() => {
+    setExpandedDisciplineId(null);
+    setBlockFilter('all');
+  }, [campus, medioCargoGroup]);
 
   const blocks = [
     'all',
@@ -51,23 +99,25 @@ export function DisciplinesView({
     'Noções de Informática',
   ];
 
-  const activeDisciplines = getCampusDisciplines(campus, medioCargoGroup);
+  const handleToggleDiscipline = (discId: string) => {
+    setExpandedDisciplineId((prev) => (prev === discId ? null : discId));
+  };
 
-  useEffect(() => {
-    setSelectedDisciplineId(null);
-  }, [campus, medioCargoGroup]);
+  const handleOpenTopicDetail = (disciplineId: string, topicId: string) => {
+    savedScrollRef.current = typeof window !== 'undefined' ? window.scrollY : 0;
+    setFocusedTarget({ disciplineId, topicId });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-  const filteredDisciplines =
-    blockFilter === 'all'
-      ? activeDisciplines
-      : activeDisciplines.filter((d) => d.editalBlock === blockFilter);
+  const handleBackToDisciplines = () => {
+    const restoreY = savedScrollRef.current;
+    setFocusedTarget(null);
+    window.setTimeout(() => {
+      window.scrollTo({ top: restoreY, behavior: 'auto' });
+    }, 30);
+  };
 
-  const focusedDiscipline = selectedDisciplineId
-    ? activeDisciplines.find((d) => d.id === selectedDisciplineId) || null
-    : null;
-  const visibleDisciplines = focusedDiscipline ? [focusedDiscipline] : filteredDisciplines;
-
-  const handleToggle = async (
+  const handleToggleProgress = async (
     topicId: string,
     disciplineId: string,
     field: 'theoryDone' | 'questionsDone' | 'revisionDone'
@@ -91,7 +141,7 @@ export function DisciplinesView({
     setStatusMessage(null);
     try {
       await saveTopicProgress(topicId, disciplineId, { notes: text });
-      setStatusMessage('Anotações do tópico sincronizadas.');
+      setStatusMessage('Anotações do tópico sincronizadas com sua conta.');
     } catch (err) {
       setStatusMessage(err instanceof Error ? err.message : 'Erro ao salvar anotação.');
     } finally {
@@ -99,555 +149,725 @@ export function DisciplinesView({
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium text-emerald-800 dark:text-emerald-400">
-            Área 1 · Conteúdo · {CONCURSO_PROFILE.board} · Edital Anexo II
-          </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1">
-            Disciplinas e Conteúdo Programático
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Selecione uma disciplina para explorar seus tópicos e abrir a Sala de Estudo.
-          </p>
+  const handleOpenMedia = (mat: StudyMaterial) => {
+    const pref = preferences.mediaPlaybackPreference || 'ask';
+    if (pref === 'internal') {
+      setPlayingMedia({ material: mat, mode: 'internal' });
+      return;
+    }
+    if (pref === 'external') {
+      setPlayingMedia({ material: mat, mode: 'external' });
+      return;
+    }
+    setChoiceMedia(mat);
+  };
+
+  const handleChoiceSelection = (mode: 'internal' | 'external', savePref?: MediaPlaybackPreference) => {
+    if (!choiceMedia) return;
+    if (savePref) {
+      void updateStudentPreferences({ mediaPlaybackPreference: savePref });
+    }
+    if (mode === 'external') {
+      void saveMediaProgress(choiceMedia.id, {
+        materialTitle: choiceMedia.title,
+        mediaType: choiceMedia.resourceType === 'podcast' ? 'audio' : 'video',
+        preferredMode: 'external',
+        openedExternallyAt: new Date().toISOString(),
+      });
+    }
+    setPlayingMedia({ material: choiceMedia, mode });
+    setChoiceMedia(null);
+  };
+
+  // Resolve focused topic view data if a topic is selected
+  const activeDisciplinesForCampus = useMemo(
+    () => getCampusDisciplines(campus, medioCargoGroup),
+    [getCampusDisciplines, campus, medioCargoGroup]
+  );
+
+  const focusedContext: { discipline: Discipline; topic: SyllabusTopic } | null = useMemo(() => {
+    if (!focusedTarget) return null;
+    const disc = activeDisciplinesForCampus.find((d) => d.id === focusedTarget.disciplineId);
+    const topic = disc?.topics.find((t) => t.id === focusedTarget.topicId);
+    if (!disc || !topic) return null;
+    return { discipline: disc, topic };
+  }, [focusedTarget, activeDisciplinesForCampus]);
+
+  const focusedResources = useMemo(() => {
+    if (!focusedContext) return { pdfs: [], videos: [], podcasts: [], relatedQuestionsCount: 0, recommendations: [] as string[] };
+    const { discipline, topic } = focusedContext;
+    const topicLower = topic.title.toLowerCase();
+    const keywords = topicLower.split(/[\s,()/:;-]+/).filter((w) => w.length > 3);
+
+    const matchingMaterials = materials.filter((m) => {
+      if (m.campusLevel && m.campusLevel !== 'geral' && m.campusLevel !== campus) return false;
+      const sameDisc =
+        m.disciplineId === discipline.id ||
+        (m.disciplineId.startsWith('geral_') &&
+          discipline.shortName.toLowerCase().includes(m.disciplineId.replace('geral_', '').replace('_', ' ')));
+      if (sameDisc) return true;
+      const chapterTitles = (m.chapters || []).map((c) => c.title).join(' ');
+      const hay = `${m.title} ${m.editalTopic || ''} ${(m.keywords || []).join(' ')} ${chapterTitles}`.toLowerCase();
+      return keywords.some((kw) => hay.includes(kw));
+    });
+
+    const pdfs = matchingMaterials.filter(
+      (m) =>
+        m.fileType === 'pdf' ||
+        m.fileType === 'drive' ||
+        m.resourceType === 'pdf' ||
+        m.resourceType === 'legislacao' ||
+        m.resourceType === 'livro_digital'
+    );
+    const videos = matchingMaterials.filter((m) => m.fileType === 'video' || m.resourceType === 'video');
+    const podcasts = matchingMaterials.filter((m) => m.resourceType === 'podcast');
+
+    const isMedio = campus === 'medio';
+    const relatedQuestionsCount = questions.filter((q) => {
+      const sameCampus = isMedio ? isMedioDisciplineId(q.disciplineId) : !isMedioDisciplineId(q.disciplineId);
+      return sameCampus && q.disciplineId === discipline.id;
+    }).length;
+
+    const recommendations = Array.from(
+      new Set(
+        matchingMaterials
+          .flatMap((m) => m.studyRecommendations || [])
+          .filter((r) => typeof r === 'string' && r.trim().length > 0)
+      )
+    );
+
+    return { pdfs, videos, podcasts, relatedQuestionsCount, recommendations };
+  }, [focusedContext, materials, questions, campus]);
+
+  // Render Single-Expand Discipline Accordion immediately below compact Academic Identifier
+  const activeMedioCargo = MEDIO_CARGOS.find((c) => c.group === medioCargoGroup) || MEDIO_CARGOS[0];
+
+  const renderCampusDisciplineList = (targetCampus: CampusLevel) => {
+    const campusDisciplines = getCampusDisciplines(targetCampus, medioCargoGroup);
+    const filteredDisciplines =
+      blockFilter === 'all'
+        ? campusDisciplines
+        : campusDisciplines.filter((d) => d.editalBlock === blockFilter);
+
+    return (
+      <div className="space-y-3">
+
+        {/* Compact block filter */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {blocks.map((block) => (
+            <button
+              key={block}
+              type="button"
+              onClick={() => {
+                setBlockFilter(block);
+                setExpandedDisciplineId(null);
+              }}
+              className={`min-h-[36px] px-2.5 py-1 text-[11px] font-semibold rounded-lg border transition-colors ${
+                blockFilter === block
+                  ? 'bg-[#0B3321] text-white border-[#0B3321]'
+                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+              }`}
+            >
+              {block === 'all' ? 'Todos os blocos' : block}
+            </button>
+          ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <a
-            href={CONCURSO_PROFILE.anexoIIPdfPath}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="min-h-[42px] px-4 py-2 bg-[#0B3321] hover:bg-[#134b32] text-white text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center gap-2 whitespace-nowrap"
-          >
-            <span>Anexo II Superior (PDF)</span>
-            <ExternalLink className="w-4 h-4" />
-          </a>
+        {/* Single-expand Discipline Accordion Cards */}
+        <div className="space-y-2" aria-label="Lista expansível de disciplinas">
+          {filteredDisciplines.map((disc) => {
+            const isDiscExpanded = expandedDisciplineId === disc.id;
+            const totalMastery = disc.topics.reduce(
+              (acc, t) => acc + (topicProgressMap[t.id]?.masteryLevel ?? 0),
+              0
+            );
+            const avgMastery = disc.topics.length ? Math.round(totalMastery / disc.topics.length) : 0;
 
-          <a
-            href={CONCURSO_PROFILE.editalUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="min-h-[42px] px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-medium rounded-xl inline-flex items-center gap-2 whitespace-nowrap"
-          >
-            <span>Portal CETAP</span>
-            <ExternalLink className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-          </a>
-        </div>
-      </div>
-
-      {/* Dois Campus de Escolha: Nível Médio (Edital 001/2026) e Nível Superior (Edital 002/2026) */}
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-            Escolha o Campus para estudar o conteúdo programático correspondente:
-          </p>
-          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-            {campus === 'medio' ? MEDIO_CONCURSO_PROFILE.editalNumber : CONCURSO_PROFILE.editalNumber}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              onChangeCampus('medio');
-              setBlockFilter('all');
-            }}
-            className={`text-left p-4 rounded-xl border transition-colors flex items-start gap-3 ${
-              campus === 'medio'
-                ? 'border-[#0B3321] bg-[#0B3321] text-white'
-                : 'border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 hover:border-slate-300 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100'
-            }`}
-          >
-            <Layers
-              className={`w-5 h-5 shrink-0 mt-0.5 ${campus === 'medio' ? 'text-emerald-300' : 'text-[#146C43] dark:text-emerald-400'}`}
-            />
-            <div>
-              <p className={`text-xs font-mono ${campus === 'medio' ? 'text-emerald-200' : 'text-emerald-800 dark:text-emerald-400'}`}>
-                CAMPUS 01 · EDITAL Nº 001/2026
-              </p>
-              <p className="font-display text-base font-bold mt-0.5">Nível Médio (Cargos 01 a 04)</p>
-              <p className={`text-xs mt-1 ${campus === 'medio' ? 'text-emerald-100/85' : 'text-slate-600 dark:text-slate-400'}`}>
-                Auxiliar Técnico Legislativo: Plenário, Telefonia, Patrimônio e Assistência Administrativa.
-              </p>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              onChangeCampus('superior');
-              setBlockFilter('all');
-            }}
-            className={`text-left p-4 rounded-xl border transition-colors flex items-start gap-3 ${
-              campus === 'superior'
-                ? 'border-[#0B3321] bg-[#0B3321] text-white'
-                : 'border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 hover:border-slate-300 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100'
-            }`}
-          >
-            <GraduationCap
-              className={`w-5 h-5 shrink-0 mt-0.5 ${campus === 'superior' ? 'text-emerald-300' : 'text-[#146C43] dark:text-emerald-400'}`}
-            />
-            <div>
-              <p className={`text-xs font-mono ${campus === 'superior' ? 'text-emerald-200' : 'text-emerald-800 dark:text-emerald-400'}`}>
-                CAMPUS 02 · EDITAL Nº 002/2026
-              </p>
-              <p className="font-display text-base font-bold mt-0.5">
-                Nível Superior (Cargo 03 · Analista Legislativo – Adm.)
-              </p>
-              <p className={`text-xs mt-1 ${campus === 'superior' ? 'text-emerald-100/85' : 'text-slate-600 dark:text-slate-400'}`}>
-                PL.AL.102, Administração (PODC, Gestão de Pessoas, PDCA/GUT, Logística), Orçamento e Direito Público.
-              </p>
-            </div>
-          </button>
-        </div>
-
-        {/* Nível Médio Cargo Selector + Anexo I Details */}
-        {campus === 'medio' && (
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
-                  {MEDIO_CONCURSO_PROFILE.primaryCargoNumber} – {MEDIO_CONCURSO_PROFILE.primaryCargoTitle} ({MEDIO_CONCURSO_PROFILE.primaryCargoCode})
-                </h2>
-                <p className="text-xs text-slate-600 dark:text-slate-400">
-                  Escolaridade: {MEDIO_CONCURSO_PROFILE.level} · Remuneração: {MEDIO_CONCURSO_PROFILE.remuneration} ·{' '}
-                  {MEDIO_CONCURSO_PROFILE.workload} · {MEDIO_CONCURSO_PROFILE.retificacaoNote}
-                </p>
-              </div>
-              <a
-                href={MEDIO_CONCURSO_PROFILE.editalUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs font-semibold text-[#0B3321] dark:text-emerald-400 hover:underline inline-flex items-center gap-1 shrink-0"
+            return (
+              <div
+                key={disc.id}
+                className={`rounded-xl border transition-colors overflow-hidden ${
+                  isDiscExpanded
+                    ? 'border-[#146C43] dark:border-emerald-500 bg-white dark:bg-slate-900'
+                    : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30'
+                }`}
               >
-                <span>Página oficial – CETAP</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-950 dark:text-emerald-200 leading-relaxed">
-              {MEDIO_CONCURSO_PROFILE.cargo04SpecificNote}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {MEDIO_CARGOS.map((cargo) => {
-                const isSelected = medioCargoGroup === cargo.group;
-                return (
-                  <button
-                    key={cargo.code}
-                    type="button"
-                    onClick={() => onChangeMedioCargoGroup(cargo.group)}
-                    className={`text-left p-4 rounded-xl border transition-colors space-y-2 ${
-                      isSelected
-                        ? 'border-[#146C43] dark:border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40'
-                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-600'
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <span className="font-mono font-bold text-[#0B3321] dark:text-emerald-300">
-                        {cargo.cargoNumber} · {cargo.code}
-                      </span>
-                      <span className="font-semibold text-[#146C43] dark:text-emerald-400">{cargo.vacanciesSummary}</span>
-                    </div>
-                    <p className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">{cargo.title}</p>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-2">
-                      {cargo.activitiesSummary}
-                    </p>
-                    <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                      Remuneração: {cargo.remuneration} · {cargo.vacanciesBreakdown}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-        {/* Prioridades Analista Legislativo – Administração (Nível Superior) */}
-        {campus === 'superior' && (
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <p className="text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">
-                  Conteúdo de Nível Superior atualizado · Edital nº 002/2026
-                </p>
-                <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
-                  8 Prioridades · Analista Legislativo – Administração
-                </h2>
-              </div>
-              <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                {activeDisciplines.length} disciplinas organizadas
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-              {ADMIN_LEGISLATIVE_PRIORITIES.map((item) => (
-                <div
-                  key={item.rank}
-                  className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 space-y-1"
-                >
-                  <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-[#0B3321] dark:text-emerald-300">
-                    <span>{String(item.rank).padStart(2, '0')}º</span>
-                    <span className="text-slate-400">·</span>
-                    <span className="font-sans text-[#146C43] dark:text-emerald-400">Prioridade</span>
-                  </div>
-                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100 leading-snug">{item.title}</p>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">{item.detail}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Collapsible Exam Structure & Priorities Toggle */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setShowExamDetails((prev) => !prev)}
-          className="w-full px-4 sm:px-5 py-3.5 flex items-center justify-between gap-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
-        >
-          <div className="min-w-0">
-            <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
-              Estrutura da Prova Objetiva (50 questões · 10,0 pts) e Critérios de Desempate
-            </p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              {showExamDetails ? 'Ocultar quadro detalhado do edital' : 'Toque para consultar distribuição de questões por bloco'}
-            </p>
-          </div>
-          {showExamDetails ? (
-            <ChevronUp className="w-4 h-4 text-slate-500 shrink-0" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
-          )}
-        </button>
-
-        {showExamDetails && (
-          <div className="px-4 sm:px-5 pb-5 pt-2 border-t border-slate-100 dark:border-slate-800 overflow-x-auto">
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
-              <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
-                Quantidade de Questões ·{' '}
-                {campus === 'medio'
-                  ? 'Nível Médio · Edital nº 001/2026 (50 questões · 10,0 pontos)'
-                  : 'Nível Superior · Edital nº 002/2026 (50 questões · 10,0 pontos)'}
-              </h2>
-              <span className="text-xs text-slate-500 dark:text-slate-400">0,2 ponto por questão · 5 alternativas (A–E)</span>
-            </div>
-            <table className="w-full text-left text-sm border-collapse min-w-[560px]">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
-                  <th className="py-2 pr-4 font-medium">Bloco do Edital</th>
-                  <th className="py-2 px-4 font-medium text-right">Qtd. de Questões</th>
-                  <th className="py-2 px-4 font-medium text-right">Pontos</th>
-                  <th className="py-2 pl-4 font-medium text-right">Desempate</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-                <tr>
-                  <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">
-                    Conhecimentos Específicos
-                    {campus === 'medio' && (
-                      <span className="block text-xs font-normal text-slate-500 dark:text-slate-400">
-                        Dir. Constitucional, Dir. Administrativo, Técnica Legislativa, Adm. Pública, Secretaria, Arquivologia e Rec. Materiais
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">20</td>
-                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">4,0</td>
-                  <td className="py-2.5 pl-4 text-right font-mono tabular-nums text-emerald-800 dark:text-emerald-400">1º critério</td>
-                </tr>
-                <tr>
-                  <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">Legislação e Ética no Serviço Público</td>
-                  <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">10</td>
-                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">2,0</td>
-                  <td className="py-2.5 pl-4 text-right font-mono tabular-nums">2º critério</td>
-                </tr>
-                <tr>
-                  <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">Língua Portuguesa</td>
-                  <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">10</td>
-                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">2,0</td>
-                  <td className="py-2.5 pl-4 text-right font-mono tabular-nums">3º critério</td>
-                </tr>
-                <tr>
-                  <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">Raciocínio Lógico</td>
-                  <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">05</td>
-                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">1,0</td>
-                  <td className="py-2.5 pl-4 text-right font-mono tabular-nums">4º critério</td>
-                </tr>
-                <tr>
-                  <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">Noções de Informática</td>
-                  <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">05</td>
-                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">1,0</td>
-                  <td className="py-2.5 pl-4 text-right font-mono tabular-nums">5º critério</td>
-                </tr>
-                <tr className="bg-slate-50/80 dark:bg-slate-800/70 font-semibold text-slate-900 dark:text-slate-100">
-                  <td className="py-2.5 pr-4">Total da Prova Objetiva</td>
-                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">50 questões</td>
-                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">10,0</td>
-                  <td className="py-2.5 pl-4 text-right text-xs text-slate-500 dark:text-slate-400 font-normal">Mínimo conforme edital</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Block Filter Tabs */}
-      <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-fit">
-        {blocks.map((block) => (
-          <button
-            key={block}
-            type="button"
-            onClick={() => {
-              setBlockFilter(block);
-              setSelectedDisciplineId(null);
-            }}
-            className={`min-h-[38px] px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
-              blockFilter === block
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            {block === 'all' ? 'Todos os blocos' : block}
-          </button>
-        ))}
-      </div>
-
-      {/* NÍVEL 2: Disciplinas Selector Grid (when no single discipline is focused, or quick switcher) */}
-      {!focusedDiscipline && (
-        <section aria-label="Disciplinas do edital" className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
-              Disciplinas ({filteredDisciplines.length})
-            </h2>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              Toque em uma disciplina para abrir seus tópicos
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filteredDisciplines.map((disc) => {
-              const totalMastery = disc.topics.reduce(
-                (acc, t) => acc + (topicProgressMap[t.id]?.masteryLevel ?? 0),
-                0
-              );
-              const avgMastery = disc.topics.length ? Math.round(totalMastery / disc.topics.length) : 0;
-              return (
                 <button
-                  key={disc.id}
                   type="button"
-                  onClick={() => setSelectedDisciplineId(disc.id)}
-                  className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-[#146C43] dark:hover:border-emerald-500 rounded-2xl p-4 transition-colors flex flex-col justify-between gap-3"
+                  aria-expanded={isDiscExpanded}
+                  onClick={() => handleToggleDiscipline(disc.id)}
+                  className="w-full min-h-[56px] px-3.5 py-3 text-left flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-300 flex items-center justify-center shrink-0">
-                      <BookOpen className="w-5 h-5" />
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                        isDiscExpanded
+                          ? 'bg-[#0B3321] text-white'
+                          : 'bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-300'
+                      }`}
+                    >
+                      <BookOpen className="w-4 h-4" />
                     </div>
-                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 mt-1" />
-                  </div>
-
-                  <div className="space-y-1 min-w-0">
-                    <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                      Prioridade {disc.priorityRank} · {disc.topics.length} tópicos · {disc.examQuestions}q
-                    </p>
-                    <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100 leading-snug">
-                      {disc.shortName}
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{disc.editalBlock}</p>
-                  </div>
-
-                  <div className="flex items-center gap-2.5 pt-1">
-                    <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-[#146C43] rounded-full transition-all"
-                        style={{ width: `${avgMastery}%` }}
-                      />
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{disc.shortName}</p>
+                      <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
+                        {disc.topics.length} assuntos · {disc.examQuestions} questões · {avgMastery}% domínio
+                      </p>
                     </div>
-                    <span className="font-mono text-xs font-semibold text-slate-700 dark:text-slate-300 tabular-nums w-9 text-right">
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="hidden sm:inline font-mono text-xs font-bold text-[#146C43] dark:text-emerald-400 tabular-nums">
                       {avgMastery}%
                     </span>
+                    {isDiscExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-slate-400" />
+                    )}
                   </div>
+                </button>
+
+                {/* Progressive Topics List (only visible inside the ONE expanded discipline) */}
+                {isDiscExpanded && (
+                  <div className="border-t border-slate-100 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                    {disc.topics.map((topic, idx) => {
+                      const prog = topicProgressMap[topic.id];
+                      const pct = prog?.masteryLevel ?? 0;
+                      return (
+                        <button
+                          key={topic.id}
+                          type="button"
+                          onClick={() => handleOpenTopicDetail(disc.id, topic.id)}
+                          className="w-full min-h-[52px] px-4 py-3 text-left flex items-center justify-between gap-3 hover:bg-[#E8F3EC]/50 dark:hover:bg-emerald-950/20 transition-colors"
+                        >
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="flex items-center gap-2 text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                              <span className="font-bold text-[#146C43] dark:text-emerald-400">
+                                {String(idx + 1).padStart(2, '0')}
+                              </span>
+                              {topic.highYield && (
+                                <span className="text-amber-700 dark:text-amber-400 font-sans font-semibold">
+                                  · Alta incidência CETAP
+                                </span>
+                              )}
+                              <span>· {pct}% concluído</span>
+                            </div>
+                            <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 leading-snug">
+                              {topic.title}
+                            </p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // NÍVEL 3: DEDICATED PROGRESSIVE ASSUNTO VIEW (no horizontal tabs, vertical stack, instant Back)
+  if (focusedContext) {
+    const { discipline, topic } = focusedContext;
+    const prog = topicProgressMap[topic.id];
+    const noteVal = noteDrafts[topic.id] ?? prog?.notes ?? '';
+
+    return (
+      <div className="space-y-4 sm:space-y-5">
+        {/* Compact Breadcrumb + Prominent Back Button */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={handleBackToDisciplines}
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[#0B3321] hover:bg-[#146C43] text-white text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Voltar</span>
+            </button>
+
+            <nav aria-label="Breadcrumb" className="min-w-0 text-xs text-slate-600 dark:text-slate-400 truncate">
+              <span className="font-semibold text-[#146C43] dark:text-emerald-400">
+                {campus === 'medio' ? 'Campus 01 (Médio)' : 'Campus 02 (Superior)'}
+              </span>
+              <span className="mx-1.5">→</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{discipline.shortName}</span>
+              <span className="mx-1.5">→</span>
+              <span className="truncate">{topic.title}</span>
+            </nav>
+          </div>
+
+          {onOpenStudyRoom && (
+            <button
+              type="button"
+              onClick={() => onOpenStudyRoom(discipline.id, topic.id)}
+              className="min-h-[42px] px-3.5 py-2 rounded-xl border border-[#146C43] text-[#0B3321] dark:text-emerald-300 bg-[#E8F3EC] dark:bg-emerald-950/40 text-xs font-bold inline-flex items-center gap-1.5"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Sala de Estudo (IA / Flashcards)</span>
+            </button>
+          )}
+        </div>
+
+        {/* Assunto Header & Subtópicos */}
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span>
+              {discipline.editalBlock} · {topic.highYield ? 'Alta incidência CETAP' : 'Conteúdo Programático'}
+            </span>
+            <span className="font-mono font-bold text-[#146C43] dark:text-emerald-400">
+              {prog?.masteryLevel ?? 0}% domínio
+            </span>
+          </div>
+          <h1 className="font-display text-lg sm:text-2xl font-bold text-slate-900 dark:text-slate-100 leading-snug">
+            {topic.title}
+          </h1>
+
+          {topic.subtopics.length > 0 && (
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
+              <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Subtópicos do Edital:</p>
+              <ul className="space-y-1 text-xs sm:text-sm text-slate-700 dark:text-slate-300">
+                {topic.subtopics.map((sub, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <span className="text-[#146C43] dark:text-emerald-400 font-bold">•</span>
+                    <span>{sub}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Checklist de progresso do tópico */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-2">
+            {(
+              [
+                { key: 'theoryDone', label: 'Teoria concluída' },
+                { key: 'questionsDone', label: 'Questões resolvidas' },
+                { key: 'revisionDone', label: 'Revisão feita' },
+              ] as const
+            ).map((item) => {
+              const checked = Boolean(prog?.[item.key]);
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  disabled={savingTopicId === topic.id}
+                  onClick={() => void handleToggleProgress(topic.id, discipline.id, item.key)}
+                  className={`min-h-[44px] px-3.5 py-2 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 transition-colors ${
+                    checked
+                      ? 'bg-[#0B3321] border-[#0B3321] text-white'
+                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+                  }`}
+                >
+                  <Check className={`w-4 h-4 ${checked ? 'opacity-100' : 'opacity-30'}`} />
+                  <span>{item.label}</span>
                 </button>
               );
             })}
           </div>
         </section>
-      )}
 
-      {focusedDiscipline && (
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl px-4 py-3">
-          <button
-            type="button"
-            onClick={() => setSelectedDisciplineId(null)}
-            className="min-h-[38px] px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-[#0B3321] dark:text-emerald-300 inline-flex items-center gap-1.5"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Todas as disciplinas</span>
-          </button>
+        {/* Materiais vinculados em listas verticais limpas */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* PDFs e Apostilas */}
+          <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
+                <span>PDFs e Apostilas ({focusedResources.pdfs.length})</span>
+              </h2>
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('materials')}
+                  className="text-xs font-semibold text-[#146C43] dark:text-emerald-400 hover:underline"
+                >
+                  Acervo completo
+                </button>
+              )}
+            </div>
 
-          {(focusedDiscipline.id.includes('portugues')) && onNavigate && (
+            {focusedResources.pdfs.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Nenhum PDF vinculado especificamente a este assunto ainda. Consulte o acervo da disciplina ou envie na Central.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {focusedResources.pdfs.slice(0, 6).map((mat) => (
+                  <button
+                    key={mat.id}
+                    type="button"
+                    onClick={() => setReaderMaterial(mat)}
+                    className="w-full min-h-[52px] p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:border-[#146C43] text-left flex items-center justify-between gap-2.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                        {mat.title}
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                        {mat.subtitle || mat.institution || 'Abrir no Book Reader ALEPA'}
+                      </p>
+                    </div>
+                    <BookOpen className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Vídeos e Podcasts */}
+          <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Video className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
+                <span>
+                  Videoaulas & Podcasts ({focusedResources.videos.length + focusedResources.podcasts.length})
+                </span>
+              </h2>
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('videos')}
+                  className="text-xs font-semibold text-[#146C43] dark:text-emerald-400 hover:underline"
+                >
+                  Central de mídia
+                </button>
+              )}
+            </div>
+
+            {focusedResources.videos.length === 0 && focusedResources.podcasts.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Nenhuma aula em vídeo ou podcast vinculado ainda. Você pode pedir inclusão pela Central de Solicitações.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {[...focusedResources.videos, ...focusedResources.podcasts].slice(0, 6).map((media) => (
+                  <button
+                    key={media.id}
+                    type="button"
+                    onClick={() => handleOpenMedia(media)}
+                    className="w-full min-h-[52px] p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:border-[#146C43] text-left flex items-center justify-between gap-2.5"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {media.resourceType === 'podcast' ? (
+                        <Headphones className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0" />
+                      ) : (
+                        <Play className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {media.title}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                          {media.subtitle || media.institution || (media.resourceType === 'podcast' ? 'Podcast' : 'Videoaula')}
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+
+        {/* Questões relacionadas & Recomendações de estudo */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
+            <h2 className="font-display text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <ClipboardList className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
+              <span>Questões Relacionadas ({focusedResources.relatedQuestionsCount})</span>
+            </h2>
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Treine questões comentadas de {discipline.shortName} na Sala de Estudo ou no Banco Geral de Simulados.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {onOpenStudyRoom && (
+                <button
+                  type="button"
+                  onClick={() => onOpenStudyRoom(discipline.id, topic.id)}
+                  className="min-h-[44px] px-4 py-2 rounded-xl bg-[#0B3321] hover:bg-[#146C43] text-white text-xs font-semibold"
+                >
+                  Resolver questões deste tópico
+                </button>
+              )}
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('simulados')}
+                  className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200"
+                >
+                  Ir para Simulados
+                </button>
+              )}
+            </div>
+          </section>
+
+          <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-2.5">
+            <h2 className="font-display text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
+              <span>Recomendações de Estudo</span>
+            </h2>
+            {focusedResources.recommendations.length > 0 ? (
+              <ul className="list-disc pl-4 space-y-1 text-xs text-slate-700 dark:text-slate-300">
+                {focusedResources.recommendations.slice(0, 5).map((rec, i) => (
+                  <li key={i}>{rec}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                Leia a base teórica/lei seca do tópico, resolva ao menos 10 questões da banca CETAP e registre seus erros para revisão espaçada (D+1, D+7, D+15).
+              </p>
+            )}
+          </section>
+        </div>
+
+        {/* Anotações pessoais do tópico */}
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
+          <label htmlFor={`topic-note-${topic.id}`} className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+            <FileEdit className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
+            <span>Anotações Pessoais deste Assunto</span>
+          </label>
+          <textarea
+            id={`topic-note-${topic.id}`}
+            rows={3}
+            value={noteVal}
+            onChange={(e) => setNoteDrafts((prev) => ({ ...prev, [topic.id]: e.target.value }))}
+            placeholder="Anote artigos importantes, exceções cobradas pela CETAP ou dicas pessoais..."
+            className="w-full p-3.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
+          />
+          {statusMessage && <p className="text-xs font-medium text-[#146C43] dark:text-emerald-400">{statusMessage}</p>}
+          <div className="flex flex-wrap justify-between items-center gap-2">
+            {discipline.id.includes('portugues') && onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('portuguese_repo')}
+                className="min-h-[42px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200"
+              >
+                Repositório Prof. Fabrício Dutra
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => onNavigate('portuguese_repo')}
-              className="min-h-[38px] px-3.5 py-1.5 bg-[#0B3321] hover:bg-[#146C43] text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5"
+              disabled={savingTopicId === topic.id}
+              onClick={() => void handleSaveNotes(topic.id, discipline.id)}
+              className="min-h-[44px] px-5 py-2 rounded-xl bg-[#0B3321] hover:bg-[#146C43] text-white text-xs sm:text-sm font-semibold ml-auto"
             >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Repositório Prof. Fabrício Dutra</span>
+              {savingTopicId === topic.id ? 'Salvando...' : 'Salvar anotações'}
             </button>
+          </div>
+        </section>
+
+        {readerMaterial && (
+          <BookReaderModal material={readerMaterial} onClose={() => setReaderMaterial(null)} />
+        )}
+        {choiceMedia && (
+          <PlaybackChoiceModal
+            material={choiceMedia}
+            currentPreference={preferences.mediaPlaybackPreference || 'ask'}
+            onChooseInternal={(pref) => handleChoiceSelection('internal', pref)}
+            onChooseExternal={(pref) => handleChoiceSelection('external', pref)}
+            onClose={() => setChoiceMedia(null)}
+          />
+        )}
+        {playingMedia && (
+          <MediaPlaybackModal
+            material={playingMedia.material}
+            initialMode={playingMedia.mode}
+            onClose={() => setPlayingMedia(null)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // NÍVEL 1 & 2: COMPACT COLLAPSED ACADEMIC IDENTIFIER → SINGLE-EXPAND DISCIPLINES → PROGRESSIVE TOPICS
+  const compactCargoShort =
+    campus === 'medio'
+      ? `${activeMedioCargo.cargoNumber} (${activeMedioCargo.code})`
+      : 'Cargo 03 · PL.AL.102';
+  const compactCampusSummary =
+    campus === 'medio'
+      ? `Campus 01 · Nível Médio · ${compactCargoShort}`
+      : `Campus 02 · Nível Superior · ${compactCargoShort}`;
+
+  return (
+    <div className="space-y-3.5 sm:space-y-4">
+      {/* 1. Título da seção */}
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="font-display text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
+          Disciplinas e Conteúdo Programático
+        </h1>
+        <a
+          href={campus === 'medio' ? MEDIO_CONCURSO_PROFILE.editalUrl : CONCURSO_PROFILE.anexoIIPdfPath}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hidden sm:inline-flex min-h-[36px] px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-medium rounded-xl items-center gap-1.5 whitespace-nowrap shrink-0"
+        >
+          <span>{campus === 'medio' ? 'Edital 001/2026' : 'Anexo II'}</span>
+          <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+        </a>
+      </div>
+
+      {/* 2. Identificador acadêmico compacto (SEMPRE RECOLHIDO por padrão) */}
+      <section
+        aria-label="Identificador acadêmico ativo"
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden"
+      >
+        <button
+          type="button"
+          aria-expanded={academicCardExpanded}
+          onClick={() => setAcademicCardExpanded((prev) => !prev)}
+          className="w-full min-h-[46px] px-3.5 py-2.5 flex items-center justify-between gap-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-7 h-7 rounded-lg bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-300 flex items-center justify-center shrink-0">
+              {campus === 'medio' ? <Layers className="w-3.5 h-3.5" /> : <GraduationCap className="w-3.5 h-3.5" />}
+            </span>
+            <span className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+              {compactCampusSummary}
+            </span>
+          </div>
+          {academicCardExpanded ? (
+            <ChevronUp className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
           )}
-        </div>
-      )}
+        </button>
 
-      {statusMessage && (
-        <div className="text-xs font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3">
-          {statusMessage}
-        </div>
-      )}
-
-      {/* NÍVEL 3: Conteúdo Programático (Tópicos da disciplina selecionada ou lista filtrada) */}
-      <div className="space-y-6">
-        {visibleDisciplines.map((disc) => {
-          const totalMastery = disc.topics.reduce(
-            (acc, t) => acc + (topicProgressMap[t.id]?.masteryLevel ?? 0),
-            0
-          );
-          const avgMastery = disc.topics.length ? Math.round(totalMastery / disc.topics.length) : 0;
-
-          return (
-            <section key={disc.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <span>Prioridade {disc.priorityRank}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{disc.editalBlock}</span>
-                    <span aria-hidden="true">·</span>
-                    <span className="font-mono font-semibold text-[#0B3321] dark:text-emerald-400">
-                      {disc.examQuestions} {disc.examQuestions === 1 ? 'questão' : 'questões'}{' '}
-                      {disc.editalBlock === 'Conhecimentos Específicos' ? '(no bloco)' : ''} ·{' '}
-                      {disc.examPoints.toFixed(1).replace('.', ',')} pts
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <span>{campus === 'medio' ? 'Edital 001/2026 (Médio)' : 'Edital 002/2026 (Superior)'}</span>
-                  </div>
-                  <h3 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 mt-1">{disc.name}</h3>
-                </div>
-
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="w-28 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-700 rounded-full transition-all"
-                      style={{ width: `${avgMastery}%` }}
-                    />
-                  </div>
-                  <span className="font-mono text-sm font-semibold text-slate-800 dark:text-slate-200 tabular-nums w-11 text-right">
-                    {avgMastery}%
-                  </span>
-                </div>
+        {academicCardExpanded && (
+          <div className="px-3.5 pb-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-3 text-xs">
+            <dl className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-700 dark:text-slate-300">
+              <div>
+                <dt className="text-[11px] text-slate-500 dark:text-slate-400">Campus</dt>
+                <dd className="font-semibold text-slate-900 dark:text-slate-100">
+                  {campus === 'medio' ? 'Campus 01' : 'Campus 02'}
+                </dd>
               </div>
-
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {disc.topics.map((topic) => {
-                  const prog = topicProgressMap[topic.id];
-                  const isExpanded = expandedTopicId === topic.id;
-                  const noteVal = noteDrafts[topic.id] ?? prog?.notes ?? '';
-
-                  return (
-                    <div key={topic.id} className="py-4 first:pt-4 last:pb-0">
-                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                            <span>{topic.highYield ? 'Alta incidência CETAP' : 'Conteúdo programático'}</span>
-                            <span aria-hidden="true">·</span>
-                            <span className="font-mono tabular-nums">{prog?.masteryLevel ?? 0}% concluído</span>
-                          </div>
-                          <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{topic.title}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{topic.subtopics.join(' · ')}</p>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2 shrink-0">
-                          {(
-                            [
-                              { key: 'theoryDone', label: 'Teoria' },
-                              { key: 'questionsDone', label: 'Questões' },
-                              { key: 'revisionDone', label: 'Revisão' },
-                            ] as const
-                          ).map((item) => {
-                            const checked = Boolean(prog?.[item.key]);
-                            return (
-                              <button
-                                key={item.key}
-                                type="button"
-                                disabled={savingTopicId === topic.id}
-                                onClick={() => handleToggle(topic.id, disc.id, item.key)}
-                                className={`min-h-[40px] px-3 py-1.5 rounded-lg border text-xs font-medium inline-flex items-center gap-1.5 transition-colors whitespace-nowrap ${
-                                  checked
-                                    ? 'bg-emerald-700 border-emerald-700 text-white'
-                                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'
-                                }`}
-                              >
-                                <Check className={`w-3.5 h-3.5 ${checked ? 'opacity-100' : 'opacity-30'}`} />
-                                <span>{item.label}</span>
-                              </button>
-                            );
-                          })}
-
-                          {onOpenStudyRoom && (
-                            <button
-                              type="button"
-                              onClick={() => onOpenStudyRoom(disc.id, topic.id)}
-                              className="min-h-[40px] px-3 py-1.5 rounded-lg bg-[#0B3321] hover:bg-[#146C43] text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
-                            >
-                              <span>Sala de Estudo</span>
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => setExpandedTopicId(isExpanded ? null : topic.id)}
-                            aria-label="Abrir anotações do tópico"
-                            className="min-h-[40px] min-w-[40px] px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center justify-center gap-1 text-xs"
-                          >
-                            <FileEdit className="w-3.5 h-3.5" />
-                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                          </button>
-                        </div>
-                      </div>
-
-                      {isExpanded && (
-                        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                          <label htmlFor={`note-${topic.id}`} className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                            Anotações de lei seca, artigos e resumos deste tópico
-                          </label>
-                          <textarea
-                            id={`note-${topic.id}`}
-                            rows={3}
-                            value={noteVal}
-                            onChange={(e) => setNoteDrafts((prev) => ({ ...prev, [topic.id]: e.target.value }))}
-                            placeholder="Anote artigos importantes, exceções de banca ou normas técnicas..."
-                            className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
-                          />
-                          <div className="flex justify-end">
-                            <button
-                              type="button"
-                              disabled={savingTopicId === topic.id}
-                              onClick={() => handleSaveNotes(topic.id, disc.id)}
-                              className="min-h-[40px] px-4 py-1.5 bg-[#0B3321] hover:bg-[#134b32] text-white text-xs font-semibold rounded-lg"
-                            >
-                              Salvar anotações
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              <div>
+                <dt className="text-[11px] text-slate-500 dark:text-slate-400">Edital</dt>
+                <dd className="font-mono font-semibold text-slate-900 dark:text-slate-100">
+                  {campus === 'medio' ? MEDIO_CONCURSO_PROFILE.editalNumber : CONCURSO_PROFILE.editalNumber}
+                </dd>
               </div>
-            </section>
-          );
-        })}
+              <div>
+                <dt className="text-[11px] text-slate-500 dark:text-slate-400">Nível</dt>
+                <dd className="font-semibold text-slate-900 dark:text-slate-100">
+                  {campus === 'medio' ? 'Nível Médio' : 'Nível Superior'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] text-slate-500 dark:text-slate-400">Cargo ativo</dt>
+                <dd className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                  {campus === 'medio' ? `${activeMedioCargo.cargoNumber} · ${activeMedioCargo.code}` : 'Cargo 03 · PL.AL.102'}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('settings')}
+                  className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#0B3321] hover:bg-[#146C43] text-white font-semibold"
+                >
+                  Alterar em Meu Perfil Acadêmico
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onChangeCampus(campus === 'medio' ? 'superior' : 'medio')}
+                className="min-h-[38px] px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold"
+              >
+                Trocar para {campus === 'medio' ? 'Campus 02 (Superior)' : 'Campus 01 (Médio)'}
+              </button>
+              <a
+                href={CONCURSO_PROFILE.editalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-h-[38px] px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium inline-flex items-center gap-1"
+              >
+                <span>Portal CETAP</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* 3. Lista de disciplinas expansíveis logo em seguida */}
+      <section aria-label="Lista de disciplinas do edital">
+        {renderCampusDisciplineList(campus)}
+      </section>
+
+      {/* Collapsible Exam Structure Details */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowExamDetails((prev) => !prev)}
+          className="w-full min-h-[48px] px-4 py-3 flex items-center justify-between gap-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60"
+        >
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+              Estrutura da Prova Objetiva (50 questões · 10,0 pts)
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              {showExamDetails ? 'Recolher quadro do edital' : 'Toque para consultar pesos por bloco'}
+            </p>
+          </div>
+          {showExamDetails ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
+        </button>
+
+        {showExamDetails && (
+          <div className="px-4 pb-4 pt-2 border-t border-slate-100 dark:border-slate-800 overflow-x-auto">
+            <table className="w-full text-left text-xs sm:text-sm border-collapse min-w-[480px]">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
+                  <th className="py-2 pr-3 font-medium">Bloco do Edital</th>
+                  <th className="py-2 px-3 font-medium text-right">Questões</th>
+                  <th className="py-2 px-3 font-medium text-right">Pontos</th>
+                  <th className="py-2 pl-3 font-medium text-right">Desempate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                <tr>
+                  <td className="py-2 pr-3 font-medium text-slate-900 dark:text-slate-100">Conhecimentos Específicos</td>
+                  <td className="py-2 px-3 text-right font-mono font-semibold">20</td>
+                  <td className="py-2 px-3 text-right font-mono">4,0</td>
+                  <td className="py-2 pl-3 text-right font-mono text-[#146C43] dark:text-emerald-400">1º critério</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-3 font-medium text-slate-900 dark:text-slate-100">Legislação e Ética</td>
+                  <td className="py-2 px-3 text-right font-mono font-semibold">10</td>
+                  <td className="py-2 px-3 text-right font-mono">2,0</td>
+                  <td className="py-2 pl-3 text-right font-mono">2º critério</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-3 font-medium text-slate-900 dark:text-slate-100">Língua Portuguesa</td>
+                  <td className="py-2 px-3 text-right font-mono font-semibold">10</td>
+                  <td className="py-2 px-3 text-right font-mono">2,0</td>
+                  <td className="py-2 pl-3 text-right font-mono">3º critério</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-3 font-medium text-slate-900 dark:text-slate-100">Raciocínio Lógico</td>
+                  <td className="py-2 px-3 text-right font-mono font-semibold">05</td>
+                  <td className="py-2 px-3 text-right font-mono">1,0</td>
+                  <td className="py-2 pl-3 text-right font-mono">4º critério</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-3 font-medium text-slate-900 dark:text-slate-100">Noções de Informática</td>
+                  <td className="py-2 px-3 text-right font-mono font-semibold">05</td>
+                  <td className="py-2 px-3 text-right font-mono">1,0</td>
+                  <td className="py-2 pl-3 text-right font-mono">5º critério</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

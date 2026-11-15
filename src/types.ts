@@ -98,6 +98,7 @@ export type NavSection =
   | 'materials'
   | 'performance'
   | 'family'
+  | 'requests'
   | 'settings'
   | 'teacher'
   | 'admin'
@@ -178,6 +179,8 @@ export type AccentPalette = 'emerald' | 'indigo' | 'amber' | 'teal';
 export type FontScalePreference = 'sm' | 'md' | 'lg';
 export type DensityPreference = 'comfortable' | 'compact';
 
+export type MediaPlaybackPreference = 'ask' | 'internal' | 'external';
+
 export interface CustomShortcut {
   id: string;
   label: string;
@@ -195,6 +198,9 @@ export interface StudentPreferences {
   favoriteQuestionIds: string[];
   favoriteTopicIds: string[];
   customShortcuts: CustomShortcut[];
+  preferredCampus?: CampusLevel;
+  preferredMedioCargo?: MedioCargoGroup;
+  mediaPlaybackPreference?: MediaPlaybackPreference;
 }
 
 export interface UserProfile {
@@ -348,10 +354,24 @@ export interface PdfVirtualSection {
   publishedToLibrary?: boolean;
 }
 
+export interface MaterialChapter {
+  id: string;
+  title: string;
+  summary?: string;
+  description?: string;
+  startPage?: number;
+  endPage?: number;
+  startSeconds?: number;
+  endSeconds?: number;
+  topics?: string[];
+  notes?: string;
+}
+
 export interface StudyMaterial {
   id: string;
   ownerId: string;
   title: string;
+  subtitle?: string;
   disciplineId: string;
   libraryCategoryId?: LibraryCategoryId;
   editalTopic?: string;
@@ -386,14 +406,19 @@ export interface StudyMaterial {
   allowDownload?: boolean;
   textLayerStatus?: 'selectable' | 'scanned' | 'mixed' | 'unknown';
   pageCount?: number;
+  durationSeconds?: number;
   fileSizeBytes?: number;
   version?: number;
   versionNote?: string;
+  chapters?: MaterialChapter[];
+  studyRecommendations?: string[];
   sections?: PdfVirtualSection[];
   parentMaterialId?: string;
   startPage?: number;
   endPage?: number;
   isVirtualSection?: boolean;
+  organizedBy?: string;
+  organizedAt?: string;
   createdAt?: unknown;
   updatedAt?: unknown;
 }
@@ -715,4 +740,72 @@ export interface AuditLogEntry {
   createdAt?: unknown;
 }
 
+export interface MediaProgressRecord {
+  mediaId: string;
+  userId: string;
+  materialTitle: string;
+  mediaType: 'video' | 'audio';
+  currentTimeSeconds: number;
+  durationSeconds: number;
+  progressPercent: number;
+  playbackRate: number;
+  preferredMode: MediaPlaybackPreference;
+  lastChapterId?: string;
+  openedExternallyAt?: string;
+  lastPlayedAt: string;
+  updatedAt?: unknown;
+}
+
+export type AcademicRequestCategory =
+  | 'duvida_academica'
+  | 'pedido_material'
+  | 'pedido_video_podcast'
+  | 'erro_conteudo'
+  | 'sugestao'
+  | 'suporte';
+
+export type AcademicRequestStatus =
+  | 'pendente'
+  | 'em_analise'
+  | 'aguardando_resposta'
+  | 'respondida'
+  | 'concluida';
+
+export interface AcademicRequest {
+  id: string;
+  requestId: string;
+  studentId: string;
+  studentName: string;
+  studentEmail?: string;
+  category: AcademicRequestCategory;
+  subject: string;
+  description: string;
+  disciplineId: string;
+  topicTitle?: string;
+  campusLevel?: LibraryScope;
+  status: AcademicRequestStatus;
+  assignedTeacherId?: string;
+  assignedTeacherName?: string;
+  assignedRole?: 'teacher' | 'editor' | 'admin';
+  forwardedBy?: string;
+  lastMessagePreview?: string;
+  lastMessageByRole?: NormalizedUserRole;
+  messageCount: number;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface AcademicRequestMessage {
+  id: string;
+  messageId: string;
+  requestId: string;
+  studentId: string;
+  assignedTeacherId?: string;
+  senderId: string;
+  senderName: string;
+  senderRole: NormalizedUserRole;
+  body: string;
+  isSystemNote?: boolean;
+  createdAt?: unknown;
+}
 
