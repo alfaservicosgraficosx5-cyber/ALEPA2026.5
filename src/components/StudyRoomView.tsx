@@ -1080,7 +1080,7 @@ export function StudyRoomView({
                 </button>
               }
             >
-              <div className="space-y-3">
+              <div className="mindmap-zoom-stage pinch-zoom-surface space-y-3">
                 <div className="px-4 py-2.5 rounded-xl bg-[#0B3321] text-white text-sm font-display font-bold text-center">
                   {activeMindMap.centralTopic}
                 </div>

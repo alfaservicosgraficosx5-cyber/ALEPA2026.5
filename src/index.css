@@ -210,3 +210,31 @@
   background: rgba(20, 108, 67, 0.28);
   color: transparent;
 }
+
+/* Fullscreen & Multi-touch Pinch-to-Zoom Support */
+:fullscreen,
+:-webkit-full-screen,
+[role="dialog"],
+.pinch-zoom-surface,
+.pdf-zoom-stage,
+.media-zoom-stage,
+.mindmap-zoom-stage,
+.pdf-text-layer {
+  touch-action: pan-x pan-y pinch-zoom;
+}
+
+:fullscreen .pinch-zoom-surface,
+:-webkit-full-screen .pinch-zoom-surface,
+:fullscreen .pdf-zoom-stage,
+:-webkit-full-screen .pdf-zoom-stage,
+:fullscreen .media-zoom-stage,
+:-webkit-full-screen .media-zoom-stage,
+:fullscreen .mindmap-zoom-stage,
+:-webkit-full-screen .mindmap-zoom-stage {
+  touch-action: pan-x pan-y pinch-zoom;
+}
+
+.zoom-transform-stage {
+  will-change: transform;
+  transform-origin: center center;
+}

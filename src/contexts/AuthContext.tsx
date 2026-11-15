@@ -890,7 +890,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const userRef = doc(db, 'users', firebaseUser.uid);
-        const snap = await getDoc(userRef);
+        let snap;
+        try {
+          snap = await getDoc(userRef);
+        } catch (fetchErr) {
+          console.warn('Offline mode or network issue while fetching user profile:', fetchErr);
+          setAuthLoading(false);
+          return;
+        }
         const isPrimaryAdminAccount =
           Boolean(firebaseUser.emailVerified) && isAdminEmail(firebaseUser.email);
         const cleanEmail = (firebaseUser.email || '').trim().toLowerCase().slice(0, 160);
@@ -906,7 +913,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             updatedAt: serverTimestamp(),
           };
           if (cleanEmail) newProfile.email = cleanEmail;
-          await setDoc(userRef, newProfile);
+          try {
+            await setDoc(userRef, newProfile);
+          } catch (writeErr) {
+            console.warn('Offline write skipped for new profile:', writeErr);
+          }
         } else {
           const existingData = snap.data() as Partial<UserProfile>;
           const updates: Record<string, unknown> = {};
@@ -918,11 +929,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           if (Object.keys(updates).length > 0) {
             updates.updatedAt = serverTimestamp();
-            await updateDoc(userRef, updates);
+            try {
+              await updateDoc(userRef, updates);
+            } catch (updateErr) {
+              console.warn('Offline update skipped for profile updates:', updateErr);
+            }
           }
         }
       } catch (err) {
-        console.error('Erro ao inicializar perfil:', err);
+        console.warn('Notice during profile initialization:', err);
       }
       setAuthLoading(false);
     });

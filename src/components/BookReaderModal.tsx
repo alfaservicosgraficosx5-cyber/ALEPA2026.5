@@ -55,6 +55,7 @@ import {
   ReaderHighlight,
   StudyMaterial,
 } from '../types';
+import { FullscreenZoomToolbar, useFullscreenZoom } from './ui/CampusPrimitives';
 
 type SidebarTab = 'outline' | 'bookmarks' | 'highlights' | 'annotations' | 'search';
 
@@ -382,7 +383,15 @@ export function BookReaderModal({
   const [lineHeight, setLineHeight] = useState<number>(initialSaved?.lineHeight || 1.65);
   const [maxWidthCh, setMaxWidthCh] = useState<number>(initialSaved?.maxWidthCh || 68);
   const [zoomScale, setZoomScale] = useState<number>(0); // 0 = ajustar à largura
-  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const zoom = useFullscreenZoom({
+    targetRef: rootRef,
+    gestureTargetRef: viewportAreaRef,
+    minScale: 1,
+    maxScale: 4,
+    step: 0.25,
+  });
+  const isFullscreen = zoom.isFullscreen;
 
   const [bookmarks, setBookmarks] = useState<ReaderBookmark[]>(initialSaved?.bookmarks || []);
   const [highlights, setHighlights] = useState<ReaderHighlight[]>(initialSaved?.highlights || []);
@@ -451,26 +460,8 @@ export function BookReaderModal({
     return () => ro.disconnect();
   }, [loadingDoc]);
 
-  // Fullscreen sync
-  useEffect(() => {
-    const onFsChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
-    };
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
-
   const toggleFullscreen = async () => {
-    try {
-      if (!document.fullscreenElement && rootRef.current?.requestFullscreen) {
-        await rootRef.current.requestFullscreen();
-      } else if (document.fullscreenElement && document.exitFullscreen) {
-        await document.exitFullscreen();
-      }
-    } catch {
-      // Fallback gracefully if fullscreen blocked by container iframe
-      setIsFullscreen((v) => !v);
-    }
+    await zoom.toggleFullscreen();
   };
 
   // Load PDF document
@@ -742,9 +733,11 @@ export function BookReaderModal({
           setSelectedQuote(null);
           return;
         }
-        if (!isFullscreen) {
-          void handleRequestClose();
+        if (isFullscreen) {
+          void zoom.exitFullscreen();
+          return;
         }
+        void handleRequestClose();
         return;
       }
       if (isEditing) return;
@@ -922,18 +915,31 @@ export function BookReaderModal({
     }
   };
 
-  // Touch swipe handlers for mobile/tablet
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length !== 1) return;
+  // Touch swipe & pinch-to-zoom handlers for mobile/tablet
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    zoom.touchHandlers.onTouchStart(e);
+    if (e.touches.length !== 1 || zoom.scale > 1.02) {
+      touchStartRef.current = null;
+      return;
+    }
     touchStartRef.current = {
       x: e.touches[0].clientX,
       y: e.touches[0].clientY,
     };
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    zoom.touchHandlers.onTouchMove(e);
+    if (e.touches.length >= 2 || zoom.scale > 1.02) {
+      touchStartRef.current = null;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    zoom.touchHandlers.onTouchEnd(e);
     const start = touchStartRef.current;
     touchStartRef.current = null;
+    if (zoom.scale > 1.02 || zoom.wasPinchGesture()) return;
     if (!start || e.changedTouches.length !== 1) return;
     const sel = window.getSelection()?.toString();
     if (sel && sel.trim().length > 2) return;
@@ -946,7 +952,7 @@ export function BookReaderModal({
   };
 
   const handleViewportClick = (e: React.MouseEvent) => {
-    if (!isFullscreen) return;
+    if (!isFullscreen || zoom.scale > 1.02) return;
     const target = e.target as HTMLElement;
     if (target.closest('button') || target.closest('a') || target.closest('input') || target.closest('.pdf-text-layer')) {
       return;
@@ -1594,7 +1600,8 @@ export function BookReaderModal({
             type="button"
             onClick={() => void toggleFullscreen()}
             title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
-            className="min-h-[40px] min-w-[40px] rounded-xl border border-current/15 hover:bg-slate-500/10 hidden sm:inline-flex items-center justify-center"
+            aria-label={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+            className="min-h-[44px] min-w-[44px] sm:min-h-[40px] sm:min-w-[40px] rounded-xl border border-current/15 hover:bg-slate-500/10 inline-flex items-center justify-center"
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
@@ -1906,11 +1913,22 @@ export function BookReaderModal({
         <div
           ref={viewportAreaRef}
           onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
+          onTouchCancel={() => {
+            zoom.touchHandlers.onTouchCancel();
+            touchStartRef.current = null;
+          }}
           onClick={handleViewportClick}
           onContextMenu={allowDownload ? undefined : (e) => e.preventDefault()}
-          className={`flex-1 min-w-0 overflow-y-auto overflow-x-auto p-3 sm:p-6 flex flex-col items-center ${themeStyle.surfaceBg}`}
+          className={`flex-1 min-w-0 overflow-y-auto overflow-x-auto p-3 sm:p-6 flex flex-col items-center pdf-zoom-stage pinch-zoom-surface ${themeStyle.surfaceBg}`}
         >
+          <div
+            style={zoom.transformStyle}
+            className={`zoom-transform-stage pdf-zoom-stage pinch-zoom-surface w-full flex-1 flex flex-col items-center ${
+              zoom.scale > 1.02 ? 'cursor-grab active:cursor-grabbing' : ''
+            }`}
+          >
           {loadingDoc ? (
             <div className="my-auto flex flex-col items-center gap-3 text-center p-8">
               <Loader2 className="w-8 h-8 animate-spin text-[#146C43]" />
@@ -2114,6 +2132,7 @@ export function BookReaderModal({
               />
             </div>
           )}
+          </div>
         </div>
       </div>
 
@@ -2187,45 +2206,20 @@ export function BookReaderModal({
         </footer>
       )}
 
-      {/* Floating Bottom-Right Fullscreen / Focus Reading Button & Zoom */}
-      <div className="fixed bottom-6 right-6 z-55 flex items-center gap-2">
-        {isFullscreen && (
-          <div className="flex items-center gap-1 bg-[#0B3321]/95 backdrop-blur text-white px-3.5 py-2.5 rounded-full shadow-2xl border border-white/20">
-            <button
-              type="button"
-              onClick={() => setZoomScale((z) => (z === 0 ? 0.9 : Math.max(0.6, Number((z - 0.15).toFixed(2)))))}
-              title="Reduzir Zoom (-)"
-              className="p-1 hover:bg-white/20 rounded-full transition-colors"
-            >
-              <ZoomOut className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setZoomScale(0)}
-              title="Ajustar Automático"
-              className="px-2 text-xs font-mono font-bold tracking-wider"
-            >
-              {zoomScale === 0 ? 'AUTO' : `${Math.round(zoomScale * 100)}%`}
-            </button>
-            <button
-              type="button"
-              onClick={() => setZoomScale((z) => (z === 0 ? 1.25 : Math.min(2.5, Number((z + 0.15).toFixed(2)))))}
-              title="Aumentar Zoom (+)"
-              className="p-1 hover:bg-white/20 rounded-full transition-colors"
-            >
-              <ZoomIn className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => void toggleFullscreen()}
-          title={isFullscreen ? 'Sair da tela cheia' : 'Modo Tela Cheia (Leitura Imersiva)'}
-          className="shadow-2xl rounded-full bg-[#0B3321] text-white hover:bg-[#146C43] px-4 py-3.5 inline-flex items-center gap-2 text-xs font-bold transition-transform hover:scale-105 active:scale-95 border-2 border-white/30"
-        >
-          {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          <span>{isFullscreen ? 'Restaurar' : 'Tela Cheia'}</span>
-        </button>
+      {/* Floating Bottom-Right Thumb-Zone Zoom & Fullscreen Controls */}
+      <div className="fixed bottom-4 right-4 left-4 z-55 pointer-events-none flex justify-end pb-safe">
+        <div className="pointer-events-auto">
+          <FullscreenZoomToolbar
+            scale={zoom.scale}
+            minScale={1}
+            maxScale={4}
+            isFullscreen={isFullscreen}
+            onZoomOut={zoom.zoomOut}
+            onZoomIn={zoom.zoomIn}
+            onResetZoom={zoom.resetZoom}
+            onToggleFullscreen={() => void toggleFullscreen()}
+          />
+        </div>
       </div>
     </div>
   );

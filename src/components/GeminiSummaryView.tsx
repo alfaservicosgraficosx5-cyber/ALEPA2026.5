@@ -793,7 +793,7 @@ export function GeminiSummaryView({
           )}
 
           {profMindMap && (
-            <div className="p-4 sm:p-5 rounded-2xl bg-[#F5F7F6] border border-slate-200 space-y-3">
+            <div className="mindmap-zoom-stage pinch-zoom-surface p-4 sm:p-5 rounded-2xl bg-[#F5F7F6] border border-slate-200 space-y-3">
               <p className="text-xs font-bold text-[#146C43]">Mapa Mental Estruturado</p>
               <div className="px-4 py-2.5 rounded-xl bg-[#0B3321] text-white text-sm font-bold text-center">
                 {profMindMap.centralTopic}
