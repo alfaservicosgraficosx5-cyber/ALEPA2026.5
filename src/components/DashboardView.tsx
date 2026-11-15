@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  BarChart3,
   Bell,
   BookOpen,
   CalendarCheck,
@@ -11,14 +12,12 @@ import {
   ExternalLink,
   FileText,
   GraduationCap,
-  Headphones,
   Layers,
   Lightbulb,
   Play,
   RotateCcw,
   Sparkles,
   Target,
-  TrendingUp,
   Users,
   Video,
 } from 'lucide-react';
@@ -325,146 +324,83 @@ export function DashboardView({
   const activeMedioCargo = getMedioCargoInfo(medioCargoGroup);
   const activeMedioCargoLabel = `${activeMedioCargo.cargoNumber} – ${activeMedioCargo.title} (${activeMedioCargo.code})`;
 
-  const navigationCards: Array<{
+  const primaryStudentAreas: Array<{
     id: NavSection;
     title: string;
     subtitle: string;
-    metric: string;
+    meta: string;
     icon: React.ComponentType<{ className?: string }>;
+    iconBoxClass: string;
   }> = [
     {
       id: 'disciplines',
-      title: isMedio
-        ? `Conteúdo Programático (${activeDisciplines.length} Disciplinas)`
-        : 'Conteúdo Programático (Nível Superior)',
-      subtitle: isMedio
-        ? `Anexo II oficial – ${activeMedioCargo.cargoNumber} (${activeMedioCargo.code}) e demais cargos de Nível Médio.`
-        : 'Anexo II oficial – Cargo 03 (Técnico Legislativo · PL.AL.102).',
-      metric: `${completedTopics}/${totalTopics} tópicos · ${syllabusPct}%`,
+      title: 'Conteúdo',
+      subtitle: 'Disciplinas e edital',
+      meta: `${completedTopics}/${totalTopics} tópicos · ${syllabusPct}%`,
       icon: BookOpen,
-    },
-    {
-      id: 'materials',
-      title: 'Biblioteca Geral + Específicas & Drive',
-      subtitle: isMedio
-        ? `Biblioteca Geral (comuns aos 2 níveis) + Acervo específico do Nível Médio (${activeMedioCargo.cargoNumber}), Drive, Planilhas e Slides.`
-        : 'Biblioteca Geral (comuns aos 2 níveis) + Acervo específico do Nível Superior (Cargo 03), Drive, Planilhas e Slides.',
-      metric: `${campusMaterials.length} recursos · 8 tipos`,
-      icon: FileText,
-    },
-    {
-      id: 'podcasts',
-      title: 'Podcasts & Spotify por Disciplina',
-      subtitle: isMedio
-        ? `Conexão com Spotify e links de áudio para as ${activeDisciplines.length} matérias do ${activeMedioCargo.cargoNumber} (${activeMedioCargo.code}).`
-        : 'Conexão com Spotify, playlists de foco e links de áudio para o Cargo 03 (PL.AL.102).',
-      metric: `${campusPodcastCount} ${campusPodcastCount === 1 ? 'podcast' : 'podcasts'}`,
-      icon: Headphones,
+      iconBoxClass: 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300',
     },
     {
       id: 'simulados',
-      title: 'Questões e Simulados CETAP',
-      subtitle: isMedio
-        ? `Banco independente de questões e simulados para Nível Médio (${activeMedioCargo.cargoNumber}).`
-        : 'Banco independente de questões e simulados para Nível Superior (Cargo 03).',
-      metric: latestAttempt
-        ? `Último: ${latestAttempt.score.toFixed(1)}/10`
-        : `${isMedio ? Math.max(campusQuestionCount, MEDIO_QUESTIONS.length) : campusQuestionCount} questões`,
+      title: 'Questões',
+      subtitle: 'Banco e simulados',
+      meta: latestAttempt
+        ? `Último simulado: ${latestAttempt.score.toFixed(1)}/10`
+        : `${isMedio ? Math.max(campusQuestionCount, MEDIO_QUESTIONS.length) : campusQuestionCount} questões CETAP`,
       icon: ClipboardList,
+      iconBoxClass: 'bg-emerald-50 dark:bg-emerald-950/60 text-[#146C43] dark:text-emerald-300',
     },
     {
-      id: 'schedule',
-      title: 'Cronograma Diário até 13/12/2026',
-      subtitle: 'Plano 2h/dia, Anexo III oficial (Edital 001/2026) e alertas WhatsApp/E-mail.',
-      metric: `${minutesToday}/${dailyGoal} min hoje`,
-      icon: CalendarCheck,
-    },
-    {
-      id: 'performance',
-      title: 'Desempenho & Caderno de Erros',
-      subtitle: isMedio
-        ? 'Métricas, horas e revisão espaçada isoladas do Nível Médio.'
-        : 'Métricas, horas e revisão espaçada isoladas do Nível Superior.',
-      metric: `${pendingErrors} revisões · ${campusAttempts.length} simulados`,
-      icon: TrendingUp,
+      id: 'videos',
+      title: 'Vídeos e Podcasts',
+      subtitle: 'Aulas e conteúdos em áudio',
+      meta: `Videoaulas · ${campusPodcastCount} ${campusPodcastCount === 1 ? 'podcast' : 'podcasts'}`,
+      icon: Video,
+      iconBoxClass: 'bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300',
     },
   ];
 
-  const quickShortcuts = [
+  const secondarySupportShortcuts = [
     {
-      id: 'materials-geral',
-      label: 'Aba Geral',
-      subtitle: 'Matérias comuns aos 2 níveis',
-      metric: 'Comuns',
-      icon: BookOpen,
-      onClick: () => (onOpenContent ? onOpenContent('geral') : onNavigate('materials')),
-    },
-    {
-      id: 'materials-content',
-      label: 'Conteúdo (PDF, Vídeo, Podcast)',
-      subtitle: `${activeDisciplines.length} disciplinas · cadastrar e abrir`,
-      metric: `${campusMaterials.length} itens`,
+      id: 'materials',
+      label: 'Central de Materiais',
+      subtitle: `${campusMaterials.length} PDFs, leis e arquivos`,
+      metric: 'Acervo',
       icon: FileText,
       onClick: () =>
         onOpenContent ? onOpenContent(isMedio ? 'medio' : 'superior') : onNavigate('materials'),
     },
     {
       id: 'schedule',
-      label: 'Cronograma 14/11 a 05/12',
-      subtitle: 'Plano 2h/dia, timer e Anexo III',
+      label: 'Cronograma 2h/dia',
+      subtitle: 'Blocos diários até a prova',
       metric: `${minutesToday}/${dailyGoal}m`,
       icon: CalendarCheck,
       onClick: () => onNavigate('schedule'),
-    },
-    {
-      id: 'simulados',
-      label: 'Questões e Simulados CETAP',
-      subtitle: isMedio ? `Nível Médio (${activeMedioCargo.cargoNumber})` : 'Nível Superior (Cargo 03)',
-      metric: latestAttempt
-        ? `${latestAttempt.score.toFixed(1)}/10`
-        : `${isMedio ? Math.max(campusQuestionCount, MEDIO_QUESTIONS.length) : campusQuestionCount} q.`,
-      icon: ClipboardList,
-      onClick: () => onNavigate('simulados'),
-    },
-    {
-      id: 'podcasts',
-      label: 'Podcasts & Spotify',
-      subtitle: 'Playlists e episódios por disciplina',
-      metric: `${campusPodcastCount} áudios`,
-      icon: Headphones,
-      onClick: () => onNavigate('podcasts'),
-    },
-    {
-      id: 'videos',
-      label: 'Vídeos & Aulas',
-      subtitle: 'YouTube, Instagram e TikTok',
-      metric: 'Assistir',
-      icon: Video,
-      onClick: () => onNavigate('videos'),
-    },
-    {
-      id: 'gemini',
-      label: 'Gemini IA · Resumos',
-      subtitle: 'Resumir vídeos, links e PDFs',
-      metric: 'IA',
-      icon: Sparkles,
-      onClick: () => onNavigate('gemini'),
-    },
-    {
-      id: 'disciplines',
-      label: 'Edital e Tópicos',
-      subtitle: `Checklist de ${activeDisciplines.length} disciplinas`,
-      metric: `${syllabusPct}%`,
-      icon: GraduationCap,
-      onClick: () => onNavigate('disciplines'),
     },
     {
       id: 'revisions',
       label: 'Caderno de Erros & Revisões',
       subtitle: 'Revisão espaçada das questões',
       metric: `${pendingErrors} pend.`,
-      icon: TrendingUp,
+      icon: RotateCcw,
       onClick: () => onNavigate('revisions'),
+    },
+    {
+      id: 'classroom',
+      label: 'Minhas Turmas & Aulas',
+      subtitle: 'Roteiros e atividades docentes',
+      metric: `${classes.filter((c) => c.campusLevel === campus).length} turmas`,
+      icon: GraduationCap,
+      onClick: () => onNavigate('classroom'),
+    },
+    {
+      id: 'gemini',
+      label: 'Professor IA · Resumos',
+      subtitle: 'Resumir vídeos, links e PDFs',
+      metric: 'IA',
+      icon: Sparkles,
+      onClick: () => onNavigate('gemini'),
     },
     {
       id: 'family',
@@ -477,6 +413,13 @@ export function DashboardView({
       onClick: () => onNavigate('family'),
     },
   ];
+
+  const resumeDiscipline =
+    activeDisciplines.find((d) => d.id === (lastStudied?.disciplineId || currentBlock.disciplineId)) ||
+    activeDisciplines[0];
+  const resumeTopic =
+    resumeDiscipline?.topics.find((t) => t.id === lastStudied?.topicId) || resumeDiscipline?.topics[0];
+  const resumeTopicProgress = resumeTopic ? topicProgressMap[resumeTopic.id]?.masteryLevel ?? 0 : syllabusPct;
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
@@ -639,24 +582,14 @@ export function DashboardView({
           </button>
 
           <div className="grid grid-cols-2 sm:flex items-center gap-2">
-            {onOpenStudyRoom && currentBlock.disciplineId && (
-              <button
-                type="button"
-                onClick={() => {
-                  const matchedDisc = activeDisciplines.find((d) => d.id === currentBlock.disciplineId) || activeDisciplines[0];
-                  const firstTopic = matchedDisc?.topics[0];
-                  if (matchedDisc && firstTopic) {
-                    onOpenStudyRoom(matchedDisc.id, firstTopic.id);
-                  } else {
-                    onNavigate('study_room');
-                  }
-                }}
-                className="min-h-[42px] px-3.5 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-300/30 text-white text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5"
-              >
-                <BookOpen className="w-4 h-4 text-emerald-300 shrink-0" />
-                <span className="truncate">Sala de Estudo</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => onNavigate('disciplines')}
+              className="min-h-[42px] px-3.5 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-300/30 text-white text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5"
+            >
+              <BookOpen className="w-4 h-4 text-emerald-300 shrink-0" />
+              <span className="truncate">Conteúdo</span>
+            </button>
             <button
               type="button"
               onClick={() => onNavigate('schedule')}
@@ -669,6 +602,128 @@ export function DashboardView({
         </div>
       </section>
       )}
+
+      {/* NÍVEL 1 — Ambiente do Estudante: 3 Áreas Principais + Desempenho Secundário */}
+      <section aria-label="Ambiente do Estudante" className="space-y-3" style={{ order: -1 }}>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h2 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+              Ambiente do Estudante
+            </h2>
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Escolha sua área principal de estudo para começar
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {primaryStudentAreas.map((area) => {
+            const Icon = area.icon;
+            return (
+              <button
+                key={area.id}
+                type="button"
+                onClick={() => onNavigate(area.id)}
+                className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-[#146C43] dark:hover:border-emerald-500 rounded-2xl p-4 sm:p-5 transition-colors flex sm:flex-col items-center sm:items-start gap-3.5 sm:gap-3"
+              >
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${area.iconBoxClass}`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+                    {area.title}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-0.5">{area.subtitle}</p>
+                  <p className="text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400 mt-1.5">
+                    {area.meta}
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 sm:hidden shrink-0" />
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Continue seus estudos / Retomar Sala de Estudo */}
+        {resumeDiscipline && resumeTopic && (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <p className="text-xs font-semibold text-[#146C43] dark:text-emerald-400">
+                  Continue seus estudos · {lastStudied ? 'Último acesso' : 'Próximo tópico recomendado'}:{' '}
+                  {resumeDiscipline.shortName}
+                </p>
+                <h3 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
+                  {resumeTopic.title}
+                </h3>
+              </div>
+              <div className="flex items-center gap-2 text-xs font-mono tabular-nums text-slate-600 dark:text-slate-400 shrink-0">
+                <span>{resumeTopicProgress}% no tópico</span>
+                <span aria-hidden="true">·</span>
+                <span className="text-[#146C43] dark:text-emerald-400 font-semibold">
+                  {resumeTopicProgress >= 100 ? 'Concluído' : 'Em andamento'}
+                </span>
+              </div>
+            </div>
+
+            <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#146C43] rounded-full transition-all duration-300"
+                style={{ width: `${resumeTopicProgress > 0 ? Math.max(6, resumeTopicProgress) : 8}%` }}
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-0.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenStudyRoom) {
+                    onOpenStudyRoom(resumeDiscipline.id, resumeTopic.id);
+                  } else {
+                    onNavigate('disciplines');
+                  }
+                }}
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-[#0B3321] hover:bg-[#146C43] text-white text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-2 transition-colors"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0" />
+                <span>Retomar Sala de Estudo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onNavigate('disciplines')}
+                className="min-h-[40px] px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-[#0B3321] dark:hover:text-emerald-300 inline-flex items-center justify-center gap-1"
+              >
+                <span>Ver todas as disciplinas</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Área Secundária: Desempenho (discreta, separada das 3 principais) */}
+        <button
+          type="button"
+          onClick={() => onNavigate('performance')}
+          className="w-full text-left bg-slate-50/90 dark:bg-slate-900/70 border border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 rounded-2xl px-4 py-3.5 transition-colors flex items-center justify-between gap-3"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0">
+              <BarChart3 className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Desempenho</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400 truncate">
+                Acompanhamento da evolução do estudante · {pendingErrors} revisões pendentes · {campusAttempts.length} simulados
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 text-xs text-slate-500 dark:text-slate-400">
+            <span className="hidden sm:inline font-medium">Menu secundário</span>
+            <ChevronRight className="w-4 h-4" />
+          </div>
+        </button>
+      </section>
 
       {/* Compact Real-Data KPI Row (2x2 on phone, 4 cols on tablet/desktop) */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3" style={{ order: -1 }}>
@@ -842,37 +897,6 @@ export function DashboardView({
         </section>
       )}
 
-      {/* Continuar de onde parei (when user has recent study context) */}
-      {lastStudied && (
-        <section className="bg-[#E8F3EC] dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-[#0B3321] text-white flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-5 h-5 text-emerald-300" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold text-[#146C43] dark:text-emerald-400 uppercase tracking-wider">
-                Continuar de onde parei
-              </p>
-              <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{lastStudied.label}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (lastStudied.disciplineId && lastStudied.topicId && onOpenStudyRoom) {
-                onOpenStudyRoom(lastStudied.disciplineId, lastStudied.topicId);
-              } else {
-                onNavigate(lastStudied.section);
-              }
-            }}
-            className="min-h-[42px] px-4 py-2 bg-[#0B3321] hover:bg-[#134b32] text-white text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Retomar estudo</span>
-          </button>
-        </section>
-      )}
-
       {/* Mobile Interactive Section Switcher */}
       <div className="md:hidden grid grid-cols-3 gap-1 p-1 bg-slate-200/80 dark:bg-slate-800 rounded-2xl">
         {(
@@ -945,10 +969,10 @@ export function DashboardView({
         </section>
         )}
 
-        {/* Mobile Clean Interactive Action List (< md) */}
+        {/* Mobile Clean Support Tools List (< md) */}
         {isCardVisible('quick_actions') && (
         <section className="md:hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
-          {quickShortcuts.map((item) => {
+          {secondarySupportShortcuts.map((item) => {
             const Icon = item.icon;
             return (
               <button
@@ -978,100 +1002,34 @@ export function DashboardView({
         </section>
         )}
 
-        {/* Desktop Rich Quick Bar + 2-Column Module Cards */}
+        {/* Desktop Support Shortcuts Strip (clean secondary access below 3 main areas) */}
         {isCardVisible('quick_actions') && (
-        <div className="hidden md:block space-y-5">
-          <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
-            <button
-              type="button"
-              onClick={() => (onOpenContent ? onOpenContent('geral') : onNavigate('materials'))}
-              className="min-h-[46px] px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-[#0B3321] hover:bg-emerald-50/50 text-left transition-colors"
-            >
-              <p className="text-xs font-bold text-[#0B3321] truncate">Aba Geral</p>
-              <p className="text-[11px] text-slate-600 truncate">Matérias comuns</p>
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                onOpenContent ? onOpenContent(isMedio ? 'medio' : 'superior') : onNavigate('materials')
-              }
-              className="min-h-[46px] px-3 py-2 rounded-xl border border-[#0B3321] bg-[#0B3321] hover:bg-[#134b32] text-white text-left transition-colors"
-            >
-              <p className="text-xs font-bold truncate">Aba Conteúdo</p>
-              <p className="text-[11px] text-emerald-200 truncate">{activeDisciplines.length} disciplinas</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate('videos')}
-              className="min-h-[46px] px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-[#0B3321] hover:bg-emerald-50/50 text-left transition-colors"
-            >
-              <div className="flex items-center justify-between gap-1">
-                <p className="text-xs font-bold text-slate-900 truncate">Vídeos</p>
-                <Video className="w-3.5 h-3.5 text-[#146C43] shrink-0" />
-              </div>
-              <p className="text-[11px] text-slate-600 truncate">YouTube, IG, TikTok</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate('gemini')}
-              className="min-h-[46px] px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50/70 hover:border-[#0B3321] text-left transition-colors"
-            >
-              <div className="flex items-center justify-between gap-1">
-                <p className="text-xs font-bold text-[#0B3321] truncate">Gemini IA</p>
-                <Sparkles className="w-3.5 h-3.5 text-[#146C43] shrink-0" />
-              </div>
-              <p className="text-[11px] text-[#146C43] font-medium truncate">Resumir Vídeo & PDF</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate('disciplines')}
-              className="min-h-[46px] px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-[#0B3321] hover:bg-emerald-50/50 text-left transition-colors"
-            >
-              <p className="text-xs font-bold text-slate-900 truncate">Edital & Tópicos</p>
-              <p className="text-[11px] text-slate-600 truncate">{syllabusPct}% concluído</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate('family')}
-              className="min-h-[46px] px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50/70 hover:border-[#0B3321] text-left transition-colors"
-            >
-              <div className="flex items-center justify-between gap-1">
-                <p className="text-xs font-bold text-[#0B3321] truncate">Familiares</p>
-                <Users className="w-3.5 h-3.5 text-[#146C43] shrink-0" />
-              </div>
-              <p className="text-[11px] text-[#146C43] font-medium truncate">
-                {isAdmin
-                  ? `${onlineNowCount} ${onlineNowCount === 1 ? 'pessoa online' : 'pessoas online'}`
-                  : 'Acesso e conteúdos'}
-              </p>
-            </button>
-          </div>
-
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {navigationCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <button
-                  key={card.id}
-                  type="button"
-                  onClick={() => onNavigate(card.id)}
-                  className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-700/50 rounded-2xl p-5 transition-colors flex flex-col justify-between gap-3 min-h-[118px]"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <Icon className="w-5 h-5 text-[#146C43] dark:text-emerald-400" />
-                    <span className="font-mono text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-                      {card.metric}
-                    </span>
+        <section className="hidden md:grid grid-cols-2 lg:grid-cols-3 gap-3">
+          {secondarySupportShortcuts.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={item.onClick}
+                className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-[#146C43] dark:hover:border-emerald-500 rounded-2xl p-4 transition-colors flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-[#146C43] dark:text-emerald-400 flex items-center justify-center shrink-0">
+                    <Icon className="w-4 h-4" />
                   </div>
-                  <div>
-                    <h3 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">{card.title}</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{card.subtitle}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{item.label}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{item.subtitle}</p>
                   </div>
-                </button>
-              );
-            })}
-          </section>
-        </div>
+                </div>
+                <span className="font-mono text-xs font-semibold text-[#0B3321] dark:text-emerald-300 tabular-nums shrink-0">
+                  {item.metric}
+                </span>
+              </button>
+            );
+          })}
+        </section>
         )}
 
         {/* Dica do Dia & Alerta de Estudos */}

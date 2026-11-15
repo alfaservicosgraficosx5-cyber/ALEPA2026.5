@@ -10,14 +10,15 @@ import {
   FileText,
   FlipHorizontal,
   Headphones,
-  Layers,
   Loader2,
   Network,
+  Play,
   RefreshCw,
   RotateCcw,
   Sparkles,
   Target,
   Video,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isMedioDisciplineId } from '../data/alepaMedioSyllabus';
@@ -36,7 +37,10 @@ import {
 import { addDaysIso, saveLastStudiedContext } from '../utils/mediaUrls';
 import { isPdfReadableMaterial } from '../lib/pdfBookEngine';
 import { BookReaderModal } from './BookReaderModal';
+import { parseVideoEmbed } from './VideosView';
 import { PageHeader, SectionCard } from './ui/CampusPrimitives';
+
+type StudyRoomTabId = 'teoria' | 'pdfs' | 'videos' | 'questoes' | 'revisao' | 'progresso';
 
 interface TopicRoomCache {
   explanation?: string;
@@ -129,6 +133,8 @@ export function StudyRoomView({
   // Quick Quiz state
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
   const [activeBookMaterial, setActiveBookMaterial] = useState<StudyMaterial | null>(null);
+  const [activeRoomTab, setActiveRoomTab] = useState<StudyRoomTabId>('teoria');
+  const [activeVideoMaterial, setActiveVideoMaterial] = useState<StudyMaterial | null>(null);
 
   useEffect(() => {
     if (!activeTopic || !activeDiscipline) return;
@@ -136,6 +142,7 @@ export function StudyRoomView({
     setRoomCache(loadRoomCache(activeTopic.id));
     setFlippedCards({});
     setQuizAnswers({});
+    setActiveVideoMaterial(null);
     setAiError(null);
     saveLastStudiedContext({
       campus,
@@ -450,511 +457,703 @@ export function StudyRoomView({
         </div>
       )}
 
-      {/* 1. Objetivos & 12. Progresso */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <SectionCard
-          title="1. Objetivos de Aprendizagem"
-          subtitle="O que você precisa dominar neste tópico do Anexo II"
-          className="lg:col-span-2"
-        >
-          <ul className="space-y-2">
-            {activeTopic.subtopics.map((sub, idx) => (
-              <li key={idx} className="flex items-start gap-2.5 text-sm text-slate-700 dark:text-slate-300">
-                <span className="mt-1.5 w-2 h-2 rounded-full bg-[#146C43] dark:bg-emerald-400 shrink-0" />
-                <span>{sub}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
-            <span className="font-mono font-semibold text-[#0B3321] dark:text-emerald-400">
-              Peso na disciplina: {activeDiscipline.examQuestions}q · {activeDiscipline.examPoints.toFixed(1)} pts
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>Ciclo recomendado: {activeDiscipline.recommendedMinutesPerCycle} min</span>
-          </div>
-        </SectionCard>
+      {/* 6 Independent Study Room Tabs */}
+      <nav
+        aria-label="Abas da Sala de Estudo"
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-1.5 flex sm:grid sm:grid-cols-6 gap-1.5 overflow-x-auto no-scrollbar"
+      >
+        {(
+          [
+            { id: 'teoria', label: 'Teoria', icon: BookOpen },
+            { id: 'pdfs', label: `PDFs (${topicMaterials.pdfs.length})`, icon: FileText },
+            {
+              id: 'videos',
+              label: `Vídeos (${topicMaterials.videos.length + topicMaterials.audios.length})`,
+              icon: Video,
+            },
+            { id: 'questoes', label: `Questões (${topicQuestions.length})`, icon: ClipboardList },
+            { id: 'revisao', label: 'Revisão', icon: RotateCcw },
+            { id: 'progresso', label: `Progresso (${progress?.masteryLevel ?? 0}%)`, icon: Target },
+          ] as const
+        ).map((tab) => {
+          const Icon = tab.icon;
+          const active = activeRoomTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveRoomTab(tab.id)}
+              className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-2 transition-colors whitespace-nowrap shrink-0 ${
+                active
+                  ? 'bg-[#0B3321] text-white shadow-xs'
+                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-emerald-300' : 'text-[#146C43] dark:text-emerald-400'}`} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </nav>
 
-        <SectionCard
-          title="12. Controle de Progresso"
-          subtitle={`Domínio atual: ${progress?.masteryLevel ?? 0}%`}
-        >
-          <div className="space-y-3">
-            <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#146C43] rounded-full transition-all"
-                style={{ width: `${progress?.masteryLevel ?? 0}%` }}
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-2">
-              {(
-                [
-                  { key: 'theoryDone', label: 'Teoria & Lei Seca concluída (40%)' },
-                  { key: 'questionsDone', label: 'Bateria de Questões feita (40%)' },
-                  { key: 'revisionDone', label: 'Revisão Espaçada registrada (20%)' },
-                ] as const
-              ).map((step) => {
-                const done = Boolean(progress?.[step.key]);
-                return (
+      {/* ABA 1: TEORIA */}
+      {activeRoomTab === 'teoria' && (
+        <div className="space-y-5">
+          <SectionCard
+            title="Explicação Teórica & Resumo Orientado (Professor IA)"
+            subtitle="Aula objetiva focada nos subtópicos do edital e pegadinhas da Fundação CETAP"
+            rightSlot={
+              <button
+                type="button"
+                disabled={loadingAction !== null}
+                onClick={() => handleRunProfessorAction('explain_topic')}
+                className="min-h-[42px] px-4 py-2 bg-[#0B3321] hover:bg-[#146C43] disabled:opacity-50 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-2"
+              >
+                {loadingAction === 'explain_topic' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4" />
+                )}
+                <span>{roomCache.explanation ? 'Atualizar explicação IA' : 'Gerar explicação do assunto'}</span>
+              </button>
+            }
+          >
+            {roomCache.explanation ? (
+              <div className="prose prose-sm dark:prose-invert max-w-none text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed bg-[#F5F7F6] dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-5 text-sm">
+                {roomCache.explanation}
+              </div>
+            ) : (
+              <div className="p-5 rounded-xl bg-[#F5F7F6] dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 space-y-2">
+                <p className="font-semibold text-slate-900 dark:text-slate-100">Guia de estudo do assunto:</p>
+                <p>
+                  Clique em <strong>"Gerar explicação do assunto"</strong> para o Professor IA estruturar os conceitos
+                  centrais de <strong>{activeTopic.title}</strong> com foco na Banca CETAP e pontos de revisão rápida.
+                </p>
+              </div>
+            )}
+          </SectionCard>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <SectionCard
+              title="Conteúdo Programático do Tópico"
+              subtitle="Subtópicos oficiais previstos no Anexo II"
+            >
+              <ul className="space-y-2">
+                {activeTopic.subtopics.map((sub, idx) => (
+                  <li key={idx} className="flex items-start gap-2.5 text-sm text-slate-700 dark:text-slate-300">
+                    <span className="mt-1.5 w-2 h-2 rounded-full bg-[#146C43] dark:bg-emerald-400 shrink-0" />
+                    <span>{sub}</span>
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+
+            <SectionCard
+              title="Anotações Pessoais de Lei Seca & Resumo"
+              subtitle="Sincronizado com seu progresso do edital"
+            >
+              <div className="space-y-3">
+                <textarea
+                  rows={5}
+                  value={noteDraft}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  placeholder="Anote artigos importantes, prazos, exceções da banca CETAP e dúvidas para revisar..."
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <button
-                    key={step.key}
                     type="button"
                     disabled={savingProg}
-                    onClick={() => handleToggleStage(step.key)}
-                    className={`min-h-[44px] px-3 py-2 rounded-xl border text-left text-xs font-semibold flex items-center justify-between gap-2 transition-colors ${
-                      done
-                        ? 'bg-[#E8F3EC] dark:bg-emerald-950/50 border-[#146C43] dark:border-emerald-600 text-[#0B3321] dark:text-emerald-300'
-                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'
+                    onClick={() => handleToggleStage('theoryDone')}
+                    className={`min-h-[40px] px-3 py-1.5 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 ${
+                      progress?.theoryDone
+                        ? 'bg-[#E8F3EC] dark:bg-emerald-950/50 border-[#146C43] text-[#0B3321] dark:text-emerald-300'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
                     }`}
                   >
-                    <span>{step.label}</span>
-                    <Check className={`w-4 h-4 shrink-0 ${done ? 'text-[#146C43] dark:text-emerald-400' : 'text-slate-300 dark:text-slate-600'}`} />
+                    <Check className="w-3.5 h-3.5" />
+                    <span>{progress?.theoryDone ? 'Teoria concluída' : 'Marcar teoria concluída'}</span>
                   </button>
-                );
-              })}
-            </div>
+                  <button
+                    type="button"
+                    disabled={savingProg}
+                    onClick={handleSaveNotes}
+                    className="min-h-[42px] px-4 py-2 bg-[#0B3321] hover:bg-[#146C43] disabled:opacity-50 text-white text-xs font-semibold rounded-xl"
+                  >
+                    Salvar anotações
+                  </button>
+                </div>
+              </div>
+            </SectionCard>
           </div>
-        </SectionCard>
-      </div>
+        </div>
+      )}
 
-      {/* 2. Explicação Teórica + 6. Resumo do Assunto */}
-      <SectionCard
-        title="2. Explicação Teórica & Resumo Orientado (Professor IA)"
-        subtitle="Gere uma aula objetiva focada nos subtópicos do edital e pegadinhas da Fundação CETAP"
-        rightSlot={
-          <button
-            type="button"
-            disabled={loadingAction !== null}
-            onClick={() => handleRunProfessorAction('explain_topic')}
-            className="min-h-[42px] px-4 py-2 bg-[#0B3321] hover:bg-[#146C43] disabled:opacity-50 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-2"
+      {/* ABA 2: PDFs */}
+      {activeRoomTab === 'pdfs' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <SectionCard
+            title="Apostilas, PDFs e Legislação"
+            subtitle={`${topicMaterials.pdfs.length} materiais relacionados a ${activeDiscipline.shortName}`}
           >
-            {loadingAction === 'explain_topic' ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+            {topicMaterials.pdfs.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Nenhum PDF cadastrado especificamente nesta disciplina ainda. Você pode adicionar na Central de Materiais.
+              </p>
             ) : (
-              <Sparkles className="w-4 h-4" />
-            )}
-            <span>{roomCache.explanation ? 'Atualizar explicação IA' : 'Gerar explicação do assunto'}</span>
-          </button>
-        }
-      >
-        {roomCache.explanation ? (
-          <div className="prose prose-sm dark:prose-invert max-w-none text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed bg-[#F5F7F6] dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-5 text-sm">
-            {roomCache.explanation}
-          </div>
-        ) : (
-          <div className="p-5 rounded-xl bg-[#F5F7F6] dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 space-y-2">
-            <p className="font-semibold text-slate-900 dark:text-slate-100">Guia de estudo do assunto:</p>
-            <p>
-              Clique em <strong>"Gerar explicação do assunto"</strong> para o Professor IA estruturar os conceitos
-              centrais de <strong>{activeTopic.title}</strong> com foco na Banca CETAP e pontos de revisão rápida.
-            </p>
-          </div>
-        )}
-      </SectionCard>
-
-      {/* 3. Materiais em PDF + 4. Fontes Verificadas + 5. Videoaulas & Áudios */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <SectionCard
-          title="3. Materiais em PDF e Documentos"
-          subtitle={`${topicMaterials.pdfs.length} selecionados para ${activeDiscipline.shortName}`}
-        >
-          {topicMaterials.pdfs.length === 0 ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Nenhum PDF cadastrado especificamente nesta disciplina ainda. Você pode adicionar na Central Inteligente.
-            </p>
-          ) : (
-            <div className="space-y-2.5">
-              {topicMaterials.pdfs.map((mat) => {
-                const openInBookReader = isPdfReadableMaterial(mat);
-                const allowDownload = mat.allowDownload !== false;
-                if (openInBookReader) {
+              <div className="space-y-2.5">
+                {topicMaterials.pdfs.map((mat) => {
+                  const openInBookReader = isPdfReadableMaterial(mat);
+                  const allowDownload = mat.allowDownload !== false;
+                  if (openInBookReader) {
+                    return (
+                      <button
+                        key={mat.id}
+                        type="button"
+                        onClick={() => setActiveBookMaterial(mat)}
+                        className="w-full text-left p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{mat.title}</p>
+                          <p className="text-[11px] text-[#146C43] dark:text-emerald-400 font-medium mt-0.5">
+                            Ler no Book Reader · {mat.institution || 'Biblioteca ALEPA'}
+                          </p>
+                        </div>
+                        <BookOpen className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
+                      </button>
+                    );
+                  }
                   return (
-                    <button
+                    <a
                       key={mat.id}
-                      type="button"
-                      onClick={() => setActiveBookMaterial(mat)}
-                      className="w-full text-left p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs transition-colors"
+                      href={mat.url.startsWith('local://') || !allowDownload ? '#' : mat.url}
+                      target={mat.url.startsWith('local://') || !allowDownload ? undefined : '_blank'}
+                      rel="noopener noreferrer"
+                      onClick={(e) => {
+                        if (mat.url.startsWith('local://') || !allowDownload) {
+                          e.preventDefault();
+                          onNavigate('materials');
+                        }
+                      }}
+                      className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs"
                     >
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{mat.title}</p>
-                        <p className="text-[11px] text-[#146C43] dark:text-emerald-400 font-medium mt-0.5">
-                          Ler no Book Reader · {mat.institution || 'Biblioteca ALEPA'}
-                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{mat.institution || 'Biblioteca ALEPA'}</p>
                       </div>
-                      <BookOpen className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
-                    </button>
+                      <FileText className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
+                    </a>
                   );
-                }
-                return (
-                  <a
-                    key={mat.id}
-                    href={mat.url.startsWith('local://') || !allowDownload ? '#' : mat.url}
-                    target={mat.url.startsWith('local://') || !allowDownload ? undefined : '_blank'}
-                    rel="noopener noreferrer"
-                    onClick={(e) => {
-                      if (mat.url.startsWith('local://') || !allowDownload) {
-                        e.preventDefault();
-                        onNavigate('materials');
-                      }
-                    }}
-                    className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs"
+                })}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => onNavigate('materials')}
+              className="mt-4 min-h-[38px] px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B3321] dark:text-emerald-400 hover:border-[#0B3321] inline-flex items-center gap-1.5"
+            >
+              <span>Abrir Central de Materiais</span>
+            </button>
+          </SectionCard>
+
+          <SectionCard
+            title="Fontes Oficiais & Legislação Verificada"
+            subtitle="Portais oficiais para consulta direta da lei seca"
+          >
+            <div className="space-y-2.5">
+              {topicVerifiedSources.map((src) => (
+                <a
+                  key={src.id}
+                  href={src.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs"
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{src.title}</p>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 line-clamp-2">{src.description}</p>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0 mt-0.5" />
+                </a>
+              ))}
+            </div>
+          </SectionCard>
+        </div>
+      )}
+
+      {/* ABA 3: VÍDEOS */}
+      {activeRoomTab === 'videos' && (
+        <div className="space-y-5">
+          {activeVideoMaterial && (() => {
+            const parsed = parseVideoEmbed(activeVideoMaterial.url, activeVideoMaterial.institution);
+            return (
+              <div className="bg-white dark:bg-slate-900 border border-[#146C43] rounded-2xl p-4 sm:p-5 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">
+                      Player Integrado · {parsed.platformLabel}
+                    </p>
+                    <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100 truncate">
+                      {activeVideoMaterial.title}
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveVideoMaterial(null)}
+                    aria-label="Fechar player"
+                    className="min-w-[36px] min-h-[36px] rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
                   >
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{mat.title}</p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{mat.institution || 'Biblioteca ALEPA'}</p>
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {parsed.embedUrl ? (
+                  parsed.platform === 'direct' ? (
+                    <video
+                      src={parsed.embedUrl}
+                      controls
+                      className="w-full rounded-xl bg-black max-h-[380px]"
+                    />
+                  ) : (
+                    <div className="aspect-video w-full rounded-xl overflow-hidden bg-slate-950">
+                      <iframe
+                        src={parsed.embedUrl}
+                        title={activeVideoMaterial.title}
+                        className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                        allowFullScreen
+                      />
                     </div>
-                    <FileText className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
-                  </a>
+                  )
+                ) : (
+                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <p className="text-slate-700 dark:text-slate-300">
+                      Esta plataforma requer abertura em nova guia para reprodução completa.
+                    </p>
+                    <a
+                      href={activeVideoMaterial.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="min-h-[38px] px-3.5 py-1.5 bg-[#0B3321] text-white font-semibold rounded-xl inline-flex items-center gap-1.5 shrink-0"
+                    >
+                      <span>Abrir vídeo</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <SectionCard
+              title="Videoaulas Relacionadas"
+              subtitle={`Aulas vinculadas a ${activeDiscipline.shortName}`}
+              rightSlot={
+                <button
+                  type="button"
+                  onClick={() => onNavigate('videos')}
+                  className="min-h-[36px] px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-[#0B3321] dark:text-emerald-300 hover:border-[#0B3321]"
+                >
+                  Abrir Central de Vídeos
+                </button>
+              }
+            >
+              {topicMaterials.videos.length === 0 ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Nenhuma videoaula vinculada especificamente a esta disciplina ainda. Adicione na área Vídeos e Podcasts.
+                </p>
+              ) : (
+                <div className="space-y-2.5">
+                  {topicMaterials.videos.map((v) => {
+                    const parsed = parseVideoEmbed(v.url, v.institution);
+                    return (
+                      <div
+                        key={v.id}
+                        className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 flex items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{v.title}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            {parsed.platformLabel} · {v.institution || 'Aula'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setActiveVideoMaterial(v)}
+                            className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#0B3321] hover:bg-[#146C43] text-white font-semibold inline-flex items-center gap-1"
+                          >
+                            <Play className="w-3.5 h-3.5" />
+                            <span>Assistir</span>
+                          </button>
+                          <a
+                            href={v.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Abrir vídeo em nova guia"
+                            className="min-w-[36px] min-h-[36px] rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </SectionCard>
+
+            <SectionCard
+              title="Podcasts & Áudios de Revisão"
+              subtitle="Conteúdos em áudio ligados à disciplina"
+              rightSlot={
+                <button
+                  type="button"
+                  onClick={() => onNavigate('podcasts')}
+                  className="min-h-[36px] px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-[#0B3321] dark:text-emerald-300 hover:border-[#0B3321]"
+                >
+                  Abrir Podcasts
+                </button>
+              }
+            >
+              {topicMaterials.audios.length === 0 ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Nenhum podcast ou áudio cadastrado nesta disciplina ainda.
+                </p>
+              ) : (
+                <div className="space-y-2.5">
+                  {topicMaterials.audios.map((a) => (
+                    <a
+                      key={a.id}
+                      href={a.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{a.title}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Podcast / Áudio</p>
+                      </div>
+                      <Headphones className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+          </div>
+        </div>
+      )}
+
+      {/* ABA 4: QUESTÕES */}
+      {activeRoomTab === 'questoes' && (
+        <SectionCard
+          title="Questões Relacionadas & Prática do Assunto"
+          subtitle="Resolva questões do banco oficial ligadas a este tópico (erros vão direto ao Caderno de Erros)"
+          rightSlot={
+            <button
+              type="button"
+              onClick={() => onNavigate('simulados')}
+              className="min-h-[38px] px-3.5 py-1.5 border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1.5"
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+              <span>Abrir Simulado Completo</span>
+            </button>
+          }
+        >
+          {topicQuestions.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Nenhuma questão vinculada a {getDisciplineShortName(activeDiscipline.id)} neste filtro. Use o Banco de
+              Questões completo ou o Professor IA para gerar questões inéditas.
+            </p>
+          ) : (
+            <div className="space-y-5">
+              {topicQuestions.map((q, qIdx) => {
+                const selected = quizAnswers[q.id];
+                const answered = selected !== undefined;
+                return (
+                  <div key={q.id} className="p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-800/50 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        Questão {qIdx + 1} · {q.topicTitle}
+                      </span>
+                      <span className={q.isOfficial ? 'text-[#146C43] dark:text-emerald-400 font-semibold' : 'text-amber-800 dark:text-amber-400 font-medium'}>
+                        {q.source || (q.isOfficial ? 'Fonte Oficial' : 'Treinamento')}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 leading-relaxed">{q.statement}</p>
+                    <div className="space-y-2">
+                      {q.options.map((opt, idx) => {
+                        const isCorrect = idx === q.correctIndex;
+                        const isChosen = selected === idx;
+                        let cls = 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800';
+                        if (answered) {
+                          if (isCorrect) cls = 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-600 text-emerald-950 dark:text-emerald-200 font-medium';
+                          else if (isChosen) cls = 'bg-red-50 dark:bg-red-950/50 border-red-500 text-red-950 dark:text-red-200';
+                        }
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => handleSelectQuickAnswer(q, idx)}
+                            className={`w-full text-left min-h-[44px] px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm flex items-start gap-2.5 transition-colors ${cls}`}
+                          >
+                            <span className="font-mono font-bold shrink-0">{LETTERS[idx]})</span>
+                            <span>{opt}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {answered && (
+                      <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 space-y-1">
+                        <p className="font-semibold text-slate-900 dark:text-slate-100 inline-flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-[#16A34A]" /> Comentário:
+                        </p>
+                        <p>{q.explanation}</p>
+                        {q.legalBasis && <p className="text-[#146C43] dark:text-emerald-400 font-medium">Base: {q.legalBasis}</p>}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => onNavigate('materials')}
-            className="mt-3 text-xs font-semibold text-[#0B3321] dark:text-emerald-400 hover:underline inline-flex items-center gap-1"
-          >
-            Abrir Central de Materiais →
-          </button>
         </SectionCard>
+      )}
 
-        <SectionCard
-          title="4. Fontes Oficiais & Acadêmicas"
-          subtitle="Portais verificados para consulta segura"
-        >
-          <div className="space-y-2.5">
-            {topicVerifiedSources.map((src) => (
-              <a
-                key={src.id}
-                href={src.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs"
-              >
-                <div className="min-w-0">
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">{src.title}</p>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 line-clamp-2">{src.description}</p>
-                </div>
-                <ExternalLink className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0 mt-0.5" />
-              </a>
-            ))}
-          </div>
-        </SectionCard>
-
-        <SectionCard
-          title="5. Videoaulas e Podcasts"
-          subtitle="Aulas e áudios vinculados à matéria"
-        >
-          <div className="space-y-2.5">
-            {topicMaterials.videos.map((v) => (
-              <a
-                key={v.id}
-                href={v.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs"
-              >
-                <div className="min-w-0">
-                  <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{v.title}</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Vídeo · {v.institution || 'Aula'}</p>
-                </div>
-                <Video className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
-              </a>
-            ))}
-            {topicMaterials.audios.map((a) => (
-              <a
-                key={a.id}
-                href={a.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/70 dark:bg-slate-800/70 flex items-start justify-between gap-2 text-xs"
-              >
-                <div className="min-w-0">
-                  <p className="font-semibold text-slate-900 dark:text-slate-100 line-clamp-2">{a.title}</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Podcast / Áudio</p>
-                </div>
-                <Headphones className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
-              </a>
-            ))}
-            {topicMaterials.videos.length === 0 && topicMaterials.audios.length === 0 && (
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Cadastre videoaulas ou episódios do Spotify nas abas Vídeos ou Podcasts para vê-los aqui.
-              </p>
-            )}
-          </div>
-          <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-[#0B3321] dark:text-emerald-400">
-            <button type="button" onClick={() => onNavigate('videos')} className="hover:underline">
-              Ver Vídeos
-            </button>
-            <button type="button" onClick={() => onNavigate('podcasts')} className="hover:underline">
-              Ver Podcasts
-            </button>
-          </div>
-        </SectionCard>
-      </div>
-
-      {/* 7. Mapa Mental + 8. Flashcards Interativos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <SectionCard
-          title="7. Mapa Mental do Assunto"
-          subtitle="Estrutura hierárquica para revisão visual rápida"
-          rightSlot={
-            <button
-              type="button"
-              disabled={loadingAction !== null}
-              onClick={() => handleRunProfessorAction('generate_mindmap')}
-              className="min-h-[38px] px-3 py-1.5 bg-[#E8F3EC] dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-[#0B3321] dark:text-emerald-300 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5"
-            >
-              {loadingAction === 'generate_mindmap' ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Network className="w-3.5 h-3.5" />
-              )}
-              <span>Gerar com IA</span>
-            </button>
-          }
-        >
-          <div className="space-y-3">
-            <div className="px-4 py-2.5 rounded-xl bg-[#0B3321] text-white text-sm font-display font-bold text-center">
-              {activeMindMap.centralTopic}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {activeMindMap.branches.map((branch, idx) => (
-                <div key={idx} className="p-3.5 rounded-xl bg-[#F5F7F6] dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2">
-                  <p className="text-xs font-bold text-[#0B3321] dark:text-emerald-400">{branch.title}</p>
-                  <ul className="space-y-1">
-                    {branch.items.map((item, i) => (
-                      <li key={i} className="text-xs text-slate-700 dark:text-slate-300 flex items-start gap-1.5">
-                        <span className="text-[#146C43] dark:text-emerald-400 font-bold">•</span>
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </div>
-        </SectionCard>
-
-        <SectionCard
-          title="8. Flashcards de Memorização Ativa"
-          subtitle="Toque no cartão para virar e avaliar sua fixação"
-          rightSlot={
-            <button
-              type="button"
-              disabled={loadingAction !== null}
-              onClick={() => handleRunProfessorAction('generate_flashcards')}
-              className="min-h-[38px] px-3 py-1.5 bg-[#E8F3EC] dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-[#0B3321] dark:text-emerald-300 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5"
-            >
-              {loadingAction === 'generate_flashcards' ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Brain className="w-3.5 h-3.5" />
-              )}
-              <span>Gerar flashcards IA</span>
-            </button>
-          }
-        >
-          <div className="space-y-3">
-            {activeFlashcards.map((card) => {
-              const isFlipped = Boolean(flippedCards[card.id]);
-              const rating = cardRatings[card.id];
-              return (
-                <div
-                  key={card.id}
-                  className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 space-y-2.5"
+      {/* ABA 5: REVISÃO */}
+      {activeRoomTab === 'revisao' && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <SectionCard
+              title="Mapa Mental do Assunto"
+              subtitle="Estrutura hierárquica para revisão visual rápida"
+              rightSlot={
+                <button
+                  type="button"
+                  disabled={loadingAction !== null}
+                  onClick={() => handleRunProfessorAction('generate_mindmap')}
+                  className="min-h-[38px] px-3 py-1.5 bg-[#E8F3EC] dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-[#0B3321] dark:text-emerald-300 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5"
                 >
-                  <button
-                    type="button"
-                    onClick={() => setFlippedCards((prev) => ({ ...prev, [card.id]: !isFlipped }))}
-                    className="w-full text-left space-y-1.5"
-                  >
-                    <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">
-                      <span>{isFlipped ? 'VERSO · RESPOSTA' : 'FRENTE · PERGUNTA'}</span>
-                      <span className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                        <FlipHorizontal className="w-3.5 h-3.5" /> Virar cartão
-                      </span>
-                    </div>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-relaxed">
-                      {isFlipped ? card.back : card.front}
-                    </p>
-                    {isFlipped && card.tip && (
-                      <p className="text-xs text-[#0B3321] dark:text-emerald-200 bg-[#E8F3EC] dark:bg-emerald-950/50 px-2.5 py-1.5 rounded-lg">
-                        Dica: {card.tip}
-                      </p>
-                    )}
-                  </button>
-
-                  {isFlipped && (
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setCardRatings((prev) => ({ ...prev, [card.id]: 'facil' }))}
-                        className={`min-h-[34px] px-3 py-1 rounded-lg text-xs font-semibold border ${
-                          rating === 'facil'
-                            ? 'bg-[#16A34A] text-white border-[#16A34A]'
-                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
-                        }`}
-                      >
-                        Dominei
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCardRatings((prev) => ({ ...prev, [card.id]: 'revisar' }))}
-                        className={`min-h-[34px] px-3 py-1 rounded-lg text-xs font-semibold border ${
-                          rating === 'revisar'
-                            ? 'bg-amber-600 text-white border-amber-600'
-                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
-                        }`}
-                      >
-                        Revisar depois
-                      </button>
-                    </div>
+                  {loadingAction === 'generate_mindmap' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Network className="w-3.5 h-3.5" />
                   )}
-                </div>
-              );
-            })}
-          </div>
-        </SectionCard>
-      </div>
-
-      {/* 9. Questões Relacionadas & 10. Mini Prática */}
-      <SectionCard
-        title="9 e 10. Questões Relacionadas & Mini Prática Rápida"
-        subtitle="Resolva questões do banco ligadas a esta disciplina (erros vão direto ao Caderno de Erros)"
-        rightSlot={
-          <button
-            type="button"
-            onClick={() => onNavigate('simulados')}
-            className="min-h-[38px] px-3.5 py-1.5 border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1.5"
-          >
-            <ClipboardList className="w-3.5 h-3.5" />
-            <span>Abrir Simulado Completo</span>
-          </button>
-        }
-      >
-        {topicQuestions.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Nenhuma questão vinculada a {getDisciplineShortName(activeDiscipline.id)} neste filtro. Use o Banco de
-            Questões ou o Professor IA para gerar questões inéditas.
-          </p>
-        ) : (
-          <div className="space-y-5">
-            {topicQuestions.map((q, qIdx) => {
-              const selected = quizAnswers[q.id];
-              const answered = selected !== undefined;
-              return (
-                <div key={q.id} className="p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-800/50 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">
-                      Questão {qIdx + 1} · {q.topicTitle}
-                    </span>
-                    <span className={q.isOfficial ? 'text-[#146C43] dark:text-emerald-400 font-semibold' : 'text-amber-800 dark:text-amber-400 font-medium'}>
-                      {q.source || (q.isOfficial ? 'Fonte Oficial' : 'Treinamento')}
-                    </span>
-                  </div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100 leading-relaxed">{q.statement}</p>
-                  <div className="space-y-2">
-                    {q.options.map((opt, idx) => {
-                      const isCorrect = idx === q.correctIndex;
-                      const isChosen = selected === idx;
-                      let cls = 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800';
-                      if (answered) {
-                        if (isCorrect) cls = 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-600 text-emerald-950 dark:text-emerald-200 font-medium';
-                        else if (isChosen) cls = 'bg-red-50 dark:bg-red-950/50 border-red-500 text-red-950 dark:text-red-200';
-                      }
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => handleSelectQuickAnswer(q, idx)}
-                          className={`w-full text-left min-h-[44px] px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm flex items-start gap-2.5 transition-colors ${cls}`}
-                        >
-                          <span className="font-mono font-bold shrink-0">{LETTERS[idx]})</span>
-                          <span>{opt}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {answered && (
-                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 space-y-1">
-                      <p className="font-semibold text-slate-900 dark:text-slate-100 inline-flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#16A34A]" /> Comentário:
-                      </p>
-                      <p>{q.explanation}</p>
-                      {q.legalBasis && <p className="text-[#146C43] dark:text-emerald-400 font-medium">Base: {q.legalBasis}</p>}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </SectionCard>
-
-      {/* 11. Revisão Programada & Anotações */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <SectionCard
-          title="11. Revisão & Caderno de Erros do Assunto"
-          subtitle={`Próximo ciclo sugerido: ${addDaysIso(7).split('-').reverse().join('/')}`}
-          rightSlot={
-            <button
-              type="button"
-              onClick={() => onNavigate('revisions')}
-              className="min-h-[38px] px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1.5"
+                  <span>Gerar com IA</span>
+                </button>
+              }
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Abrir Revisões</span>
-            </button>
-          }
-        >
-          {topicErrors.length === 0 ? (
-            <div className="p-4 rounded-xl bg-[#F5F7F6] dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2.5">
-              <RefreshCw className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
-              <p>
-                Nenhum erro pendente registrado neste tópico. Se você errar alguma questão na mini prática acima ou nos
-                simulados, ela aparecerá aqui para revisão espaçada automática.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {topicErrors.slice(0, 4).map((err) => (
-                <div key={err.id} className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 text-xs space-y-1">
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                    <span>Status: {err.status === 'mastered' ? 'Dominada' : 'Pendente'}</span>
-                    <span>Próx. revisão: {err.nextReviewDate.split('-').reverse().join('/')}</span>
-                  </div>
-                  <p className="font-medium text-slate-900 dark:text-slate-100 line-clamp-2">{err.questionStem}</p>
+              <div className="space-y-3">
+                <div className="px-4 py-2.5 rounded-xl bg-[#0B3321] text-white text-sm font-display font-bold text-center">
+                  {activeMindMap.centralTopic}
                 </div>
-              ))}
-            </div>
-          )}
-        </SectionCard>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {activeMindMap.branches.map((branch, idx) => (
+                    <div key={idx} className="p-3.5 rounded-xl bg-[#F5F7F6] dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2">
+                      <p className="text-xs font-bold text-[#0B3321] dark:text-emerald-400">{branch.title}</p>
+                      <ul className="space-y-1">
+                        {branch.items.map((item, i) => (
+                          <li key={i} className="text-xs text-slate-700 dark:text-slate-300 flex items-start gap-1.5">
+                            <span className="text-[#146C43] dark:text-emerald-400 font-bold">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </SectionCard>
 
-        <SectionCard
-          title="Anotações Pessoais de Lei Seca & Resumo"
-          subtitle="Sincronizado com seu progresso do edital"
-        >
-          <div className="space-y-3">
-            <textarea
-              rows={5}
-              value={noteDraft}
-              onChange={(e) => setNoteDraft(e.target.value)}
-              placeholder="Anote artigos importantes, prazos, exceções da banca CETAP e dúvidas para revisar..."
-              className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0B3321]"
-            />
-            <div className="flex justify-end">
+            <SectionCard
+              title="Flashcards de Memorização Ativa"
+              subtitle="Toque no cartão para virar e avaliar sua fixação"
+              rightSlot={
+                <button
+                  type="button"
+                  disabled={loadingAction !== null}
+                  onClick={() => handleRunProfessorAction('generate_flashcards')}
+                  className="min-h-[38px] px-3 py-1.5 bg-[#E8F3EC] dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-[#0B3321] dark:text-emerald-300 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5"
+                >
+                  {loadingAction === 'generate_flashcards' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Brain className="w-3.5 h-3.5" />
+                  )}
+                  <span>Gerar flashcards IA</span>
+                </button>
+              }
+            >
+              <div className="space-y-3">
+                {activeFlashcards.map((card) => {
+                  const isFlipped = Boolean(flippedCards[card.id]);
+                  const rating = cardRatings[card.id];
+                  return (
+                    <div
+                      key={card.id}
+                      className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 space-y-2.5"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setFlippedCards((prev) => ({ ...prev, [card.id]: !isFlipped }))}
+                        className="w-full text-left space-y-1.5"
+                      >
+                        <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">
+                          <span>{isFlipped ? 'VERSO · RESPOSTA' : 'FRENTE · PERGUNTA'}</span>
+                          <span className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                            <FlipHorizontal className="w-3.5 h-3.5" /> Virar cartão
+                          </span>
+                        </div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-relaxed">
+                          {isFlipped ? card.back : card.front}
+                        </p>
+                        {isFlipped && card.tip && (
+                          <p className="text-xs text-[#0B3321] dark:text-emerald-200 bg-[#E8F3EC] dark:bg-emerald-950/50 px-2.5 py-1.5 rounded-lg">
+                            Dica: {card.tip}
+                          </p>
+                        )}
+                      </button>
+
+                      {isFlipped && (
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setCardRatings((prev) => ({ ...prev, [card.id]: 'facil' }))}
+                            className={`min-h-[34px] px-3 py-1 rounded-lg text-xs font-semibold border ${
+                              rating === 'facil'
+                                ? 'bg-[#16A34A] text-white border-[#16A34A]'
+                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+                            }`}
+                          >
+                            Dominei
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCardRatings((prev) => ({ ...prev, [card.id]: 'revisar' }))}
+                            className={`min-h-[34px] px-3 py-1 rounded-lg text-xs font-semibold border ${
+                              rating === 'revisar'
+                                ? 'bg-amber-600 text-white border-amber-600'
+                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+                            }`}
+                          >
+                            Revisar depois
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </SectionCard>
+          </div>
+
+          <SectionCard
+            title="Caderno de Erros & Revisão Programada do Assunto"
+            subtitle={`Próximo ciclo sugerido: ${addDaysIso(7).split('-').reverse().join('/')}`}
+            rightSlot={
               <button
                 type="button"
-                disabled={savingProg}
-                onClick={handleSaveNotes}
-                className="min-h-[42px] px-4 py-2 bg-[#0B3321] hover:bg-[#146C43] disabled:opacity-50 text-white text-xs font-semibold rounded-xl"
+                onClick={() => onNavigate('revisions')}
+                className="min-h-[38px] px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1.5"
               >
-                Salvar anotações
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Abrir Revisões</span>
               </button>
+            }
+          >
+            {topicErrors.length === 0 ? (
+              <div className="p-4 rounded-xl bg-[#F5F7F6] dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2.5">
+                <RefreshCw className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0 mt-0.5" />
+                <p>
+                  Nenhum erro pendente registrado neste tópico. Se você errar alguma questão na aba Questões ou nos
+                  simulados, ela aparecerá aqui para revisão espaçada automática.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {topicErrors.slice(0, 6).map((err) => (
+                  <div key={err.id} className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 text-xs space-y-1">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                      <span>Status: {err.status === 'mastered' ? 'Dominada' : 'Pendente'}</span>
+                      <span>Próx. revisão: {err.nextReviewDate.split('-').reverse().join('/')}</span>
+                    </div>
+                    <p className="font-medium text-slate-900 dark:text-slate-100 line-clamp-2">{err.questionStem}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+        </div>
+      )}
+
+      {/* ABA 6: PROGRESSO */}
+      {activeRoomTab === 'progresso' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <SectionCard
+            title="Objetivos de Aprendizagem"
+            subtitle="O que você precisa dominar neste tópico do Anexo II"
+            className="lg:col-span-2"
+          >
+            <ul className="space-y-2">
+              {activeTopic.subtopics.map((sub, idx) => (
+                <li key={idx} className="flex items-start gap-2.5 text-sm text-slate-700 dark:text-slate-300">
+                  <span className="mt-1.5 w-2 h-2 rounded-full bg-[#146C43] dark:bg-emerald-400 shrink-0" />
+                  <span>{sub}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
+              <span className="font-mono font-semibold text-[#0B3321] dark:text-emerald-400">
+                Peso na disciplina: {activeDiscipline.examQuestions}q · {activeDiscipline.examPoints.toFixed(1)} pts
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>Ciclo recomendado: {activeDiscipline.recommendedMinutesPerCycle} min</span>
             </div>
-          </div>
-        </SectionCard>
-      </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Controle de Progresso"
+            subtitle={`Domínio atual: ${progress?.masteryLevel ?? 0}%`}
+          >
+            <div className="space-y-3">
+              <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#146C43] rounded-full transition-all"
+                  style={{ width: `${progress?.masteryLevel ?? 0}%` }}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {(
+                  [
+                    { key: 'theoryDone', label: 'Teoria & Lei Seca concluída (40%)' },
+                    { key: 'questionsDone', label: 'Bateria de Questões feita (40%)' },
+                    { key: 'revisionDone', label: 'Revisão Espaçada registrada (20%)' },
+                  ] as const
+                ).map((step) => {
+                  const done = Boolean(progress?.[step.key]);
+                  return (
+                    <button
+                      key={step.key}
+                      type="button"
+                      disabled={savingProg}
+                      onClick={() => handleToggleStage(step.key)}
+                      className={`min-h-[44px] px-3 py-2 rounded-xl border text-left text-xs font-semibold flex items-center justify-between gap-2 transition-colors ${
+                        done
+                          ? 'bg-[#E8F3EC] dark:bg-emerald-950/50 border-[#146C43] dark:border-emerald-600 text-[#0B3321] dark:text-emerald-300'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <span>{step.label}</span>
+                      <Check className={`w-4 h-4 shrink-0 ${done ? 'text-[#146C43] dark:text-emerald-400' : 'text-slate-300 dark:text-slate-600'}`} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </SectionCard>
+        </div>
+      )}
 
       {activeBookMaterial && (
         <BookReaderModal

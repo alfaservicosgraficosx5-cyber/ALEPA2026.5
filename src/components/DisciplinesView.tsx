@@ -1,9 +1,20 @@
-import React, { useState } from 'react';
-import { Check, ChevronDown, ChevronUp, ExternalLink, FileEdit, GraduationCap, Layers } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+  ArrowLeft,
+  BookOpen,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  ExternalLink,
+  FileEdit,
+  GraduationCap,
+  Layers,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { MEDIO_CARGOS, MEDIO_CONCURSO_PROFILE } from '../data/alepaMedioSyllabus';
 import { ADMIN_LEGISLATIVE_PRIORITIES, CONCURSO_PROFILE } from '../data/alepaSyllabus';
-import { CampusLevel, MedioCargoGroup } from '../types';
+import { CampusLevel, MedioCargoGroup, NavSection } from '../types';
 
 interface DisciplinesViewProps {
   campus: CampusLevel;
@@ -11,6 +22,7 @@ interface DisciplinesViewProps {
   medioCargoGroup: MedioCargoGroup;
   onChangeMedioCargoGroup: (group: MedioCargoGroup) => void;
   onOpenStudyRoom?: (disciplineId: string, topicId: string) => void;
+  onNavigate?: (section: NavSection) => void;
 }
 
 export function DisciplinesView({
@@ -19,9 +31,12 @@ export function DisciplinesView({
   medioCargoGroup,
   onChangeMedioCargoGroup,
   onOpenStudyRoom,
+  onNavigate,
 }: DisciplinesViewProps) {
   const { topicProgressMap, saveTopicProgress, getCampusDisciplines } = useAuth();
   const [blockFilter, setBlockFilter] = useState<string>('all');
+  const [selectedDisciplineId, setSelectedDisciplineId] = useState<string | null>(null);
+  const [showExamDetails, setShowExamDetails] = useState(false);
   const [expandedTopicId, setExpandedTopicId] = useState<string | null>(null);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [savingTopicId, setSavingTopicId] = useState<string | null>(null);
@@ -38,10 +53,19 @@ export function DisciplinesView({
 
   const activeDisciplines = getCampusDisciplines(campus, medioCargoGroup);
 
+  useEffect(() => {
+    setSelectedDisciplineId(null);
+  }, [campus, medioCargoGroup]);
+
   const filteredDisciplines =
     blockFilter === 'all'
       ? activeDisciplines
       : activeDisciplines.filter((d) => d.editalBlock === blockFilter);
+
+  const focusedDiscipline = selectedDisciplineId
+    ? activeDisciplines.find((d) => d.id === selectedDisciplineId) || null
+    : null;
+  const visibleDisciplines = focusedDiscipline ? [focusedDiscipline] : filteredDisciplines;
 
   const handleToggle = async (
     topicId: string,
@@ -80,11 +104,14 @@ export function DisciplinesView({
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <p className="text-xs font-medium text-emerald-800 dark:text-emerald-400">
-            Concurso ALEPA 2026 · {CONCURSO_PROFILE.board} · Conteúdo Programático Oficial (Anexo II)
+            Área 1 · Conteúdo · {CONCURSO_PROFILE.board} · Edital Anexo II
           </p>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1">
-            Campus & Conteúdo Programático do Edital
+            Disciplinas e Conteúdo Programático
           </h1>
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
+            Selecione uma disciplina para explorar seus tópicos e abrir a Sala de Estudo.
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -275,72 +302,96 @@ export function DisciplinesView({
         )}
       </section>
 
-      {/* Estrutura da Prova Objetiva e Quantidade de Questões (Médio e Superior) */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 overflow-x-auto">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
-          <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
-            Quantidade de Questões ·{' '}
-            {campus === 'medio'
-              ? 'Nível Médio · Edital nº 001/2026 (50 questões · 10,0 pontos)'
-              : 'Nível Superior · Edital nº 002/2026 (50 questões · 10,0 pontos)'}
-          </h2>
-          <span className="text-xs text-slate-500 dark:text-slate-400">0,2 ponto por questão · 5 alternativas (A–E)</span>
-        </div>
-        <table className="w-full text-left text-sm border-collapse min-w-[560px]">
-          <thead>
-            <tr className="border-b border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
-              <th className="py-2 pr-4 font-medium">Bloco do Edital</th>
-              <th className="py-2 px-4 font-medium text-right">Qtd. de Questões</th>
-              <th className="py-2 px-4 font-medium text-right">Pontos</th>
-              <th className="py-2 pl-4 font-medium text-right">Desempate</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-            <tr>
-              <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">
-                Conhecimentos Específicos
-                {campus === 'medio' && (
-                  <span className="block text-xs font-normal text-slate-500 dark:text-slate-400">
-                    Dir. Constitucional, Dir. Administrativo, Técnica Legislativa, Adm. Pública, Secretaria, Arquivologia e Rec. Materiais
-                  </span>
-                )}
-              </td>
-              <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">20</td>
-              <td className="py-2.5 px-4 text-right font-mono tabular-nums">4,0</td>
-              <td className="py-2.5 pl-4 text-right font-mono tabular-nums text-emerald-800 dark:text-emerald-400">1º critério</td>
-            </tr>
-            <tr>
-              <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">Legislação e Ética no Serviço Público</td>
-              <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">10</td>
-              <td className="py-2.5 px-4 text-right font-mono tabular-nums">2,0</td>
-              <td className="py-2.5 pl-4 text-right font-mono tabular-nums">2º critério</td>
-            </tr>
-            <tr>
-              <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">Língua Portuguesa</td>
-              <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">10</td>
-              <td className="py-2.5 px-4 text-right font-mono tabular-nums">2,0</td>
-              <td className="py-2.5 pl-4 text-right font-mono tabular-nums">3º critério</td>
-            </tr>
-            <tr>
-              <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">Raciocínio Lógico</td>
-              <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">05</td>
-              <td className="py-2.5 px-4 text-right font-mono tabular-nums">1,0</td>
-              <td className="py-2.5 pl-4 text-right font-mono tabular-nums">4º critério</td>
-            </tr>
-            <tr>
-              <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">Noções de Informática</td>
-              <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">05</td>
-              <td className="py-2.5 px-4 text-right font-mono tabular-nums">1,0</td>
-              <td className="py-2.5 pl-4 text-right font-mono tabular-nums">5º critério</td>
-            </tr>
-            <tr className="bg-slate-50/80 dark:bg-slate-800/70 font-semibold text-slate-900 dark:text-slate-100">
-              <td className="py-2.5 pr-4">Total da Prova Objetiva</td>
-              <td className="py-2.5 px-4 text-right font-mono tabular-nums">50 questões</td>
-              <td className="py-2.5 px-4 text-right font-mono tabular-nums">10,0</td>
-              <td className="py-2.5 pl-4 text-right text-xs text-slate-500 dark:text-slate-400 font-normal">Mínimo conforme edital</td>
-            </tr>
-          </tbody>
-        </table>
+      {/* Collapsible Exam Structure & Priorities Toggle */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowExamDetails((prev) => !prev)}
+          className="w-full px-4 sm:px-5 py-3.5 flex items-center justify-between gap-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
+        >
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+              Estrutura da Prova Objetiva (50 questões · 10,0 pts) e Critérios de Desempate
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              {showExamDetails ? 'Ocultar quadro detalhado do edital' : 'Toque para consultar distribuição de questões por bloco'}
+            </p>
+          </div>
+          {showExamDetails ? (
+            <ChevronUp className="w-4 h-4 text-slate-500 shrink-0" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
+          )}
+        </button>
+
+        {showExamDetails && (
+          <div className="px-4 sm:px-5 pb-5 pt-2 border-t border-slate-100 dark:border-slate-800 overflow-x-auto">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
+              <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+                Quantidade de Questões ·{' '}
+                {campus === 'medio'
+                  ? 'Nível Médio · Edital nº 001/2026 (50 questões · 10,0 pontos)'
+                  : 'Nível Superior · Edital nº 002/2026 (50 questões · 10,0 pontos)'}
+              </h2>
+              <span className="text-xs text-slate-500 dark:text-slate-400">0,2 ponto por questão · 5 alternativas (A–E)</span>
+            </div>
+            <table className="w-full text-left text-sm border-collapse min-w-[560px]">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
+                  <th className="py-2 pr-4 font-medium">Bloco do Edital</th>
+                  <th className="py-2 px-4 font-medium text-right">Qtd. de Questões</th>
+                  <th className="py-2 px-4 font-medium text-right">Pontos</th>
+                  <th className="py-2 pl-4 font-medium text-right">Desempate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                <tr>
+                  <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">
+                    Conhecimentos Específicos
+                    {campus === 'medio' && (
+                      <span className="block text-xs font-normal text-slate-500 dark:text-slate-400">
+                        Dir. Constitucional, Dir. Administrativo, Técnica Legislativa, Adm. Pública, Secretaria, Arquivologia e Rec. Materiais
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">20</td>
+                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">4,0</td>
+                  <td className="py-2.5 pl-4 text-right font-mono tabular-nums text-emerald-800 dark:text-emerald-400">1º critério</td>
+                </tr>
+                <tr>
+                  <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">Legislação e Ética no Serviço Público</td>
+                  <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">10</td>
+                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">2,0</td>
+                  <td className="py-2.5 pl-4 text-right font-mono tabular-nums">2º critério</td>
+                </tr>
+                <tr>
+                  <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">Língua Portuguesa</td>
+                  <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">10</td>
+                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">2,0</td>
+                  <td className="py-2.5 pl-4 text-right font-mono tabular-nums">3º critério</td>
+                </tr>
+                <tr>
+                  <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">Raciocínio Lógico</td>
+                  <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">05</td>
+                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">1,0</td>
+                  <td className="py-2.5 pl-4 text-right font-mono tabular-nums">4º critério</td>
+                </tr>
+                <tr>
+                  <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-slate-100">Noções de Informática</td>
+                  <td className="py-2.5 px-4 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">05</td>
+                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">1,0</td>
+                  <td className="py-2.5 pl-4 text-right font-mono tabular-nums">5º critério</td>
+                </tr>
+                <tr className="bg-slate-50/80 dark:bg-slate-800/70 font-semibold text-slate-900 dark:text-slate-100">
+                  <td className="py-2.5 pr-4">Total da Prova Objetiva</td>
+                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">50 questões</td>
+                  <td className="py-2.5 px-4 text-right font-mono tabular-nums">10,0</td>
+                  <td className="py-2.5 pl-4 text-right text-xs text-slate-500 dark:text-slate-400 font-normal">Mínimo conforme edital</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Block Filter Tabs */}
@@ -349,7 +400,10 @@ export function DisciplinesView({
           <button
             key={block}
             type="button"
-            onClick={() => setBlockFilter(block)}
+            onClick={() => {
+              setBlockFilter(block);
+              setSelectedDisciplineId(null);
+            }}
             className={`min-h-[38px] px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
               blockFilter === block
                 ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
@@ -361,15 +415,100 @@ export function DisciplinesView({
         ))}
       </div>
 
+      {/* NÍVEL 2: Disciplinas Selector Grid (when no single discipline is focused, or quick switcher) */}
+      {!focusedDiscipline && (
+        <section aria-label="Disciplinas do edital" className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+              Disciplinas ({filteredDisciplines.length})
+            </h2>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Toque em uma disciplina para abrir seus tópicos
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filteredDisciplines.map((disc) => {
+              const totalMastery = disc.topics.reduce(
+                (acc, t) => acc + (topicProgressMap[t.id]?.masteryLevel ?? 0),
+                0
+              );
+              const avgMastery = disc.topics.length ? Math.round(totalMastery / disc.topics.length) : 0;
+              return (
+                <button
+                  key={disc.id}
+                  type="button"
+                  onClick={() => setSelectedDisciplineId(disc.id)}
+                  className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-[#146C43] dark:hover:border-emerald-500 rounded-2xl p-4 transition-colors flex flex-col justify-between gap-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-300 flex items-center justify-center shrink-0">
+                      <BookOpen className="w-5 h-5" />
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 mt-1" />
+                  </div>
+
+                  <div className="space-y-1 min-w-0">
+                    <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                      Prioridade {disc.priorityRank} · {disc.topics.length} tópicos · {disc.examQuestions}q
+                    </p>
+                    <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100 leading-snug">
+                      {disc.shortName}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{disc.editalBlock}</p>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 pt-1">
+                    <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[#146C43] rounded-full transition-all"
+                        style={{ width: `${avgMastery}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-xs font-semibold text-slate-700 dark:text-slate-300 tabular-nums w-9 text-right">
+                      {avgMastery}%
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {focusedDiscipline && (
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setSelectedDisciplineId(null)}
+            className="min-h-[38px] px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-[#0B3321] dark:text-emerald-300 inline-flex items-center gap-1.5"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Todas as disciplinas</span>
+          </button>
+
+          {(focusedDiscipline.id.includes('portugues')) && onNavigate && (
+            <button
+              type="button"
+              onClick={() => onNavigate('portuguese_repo')}
+              className="min-h-[38px] px-3.5 py-1.5 bg-[#0B3321] hover:bg-[#146C43] text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Repositório Prof. Fabrício Dutra</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {statusMessage && (
         <div className="text-xs font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3">
           {statusMessage}
         </div>
       )}
 
-      {/* Disciplines List */}
+      {/* NÍVEL 3: Conteúdo Programático (Tópicos da disciplina selecionada ou lista filtrada) */}
       <div className="space-y-6">
-        {filteredDisciplines.map((disc) => {
+        {visibleDisciplines.map((disc) => {
           const totalMastery = disc.topics.reduce(
             (acc, t) => acc + (topicProgressMap[t.id]?.masteryLevel ?? 0),
             0

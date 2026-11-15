@@ -11,7 +11,6 @@ import {
   Compass,
   FileText,
   GraduationCap,
-  Headphones,
   Home,
   Layers,
   LayoutGrid,
@@ -59,11 +58,8 @@ const SimuladosView = lazy(() =>
 const ErrorNotebookView = lazy(() =>
   import('./components/ErrorNotebookView').then((m) => ({ default: m.ErrorNotebookView }))
 );
-const PodcastsView = lazy(() =>
-  import('./components/PodcastsView').then((m) => ({ default: m.PodcastsView }))
-);
-const VideosView = lazy(() =>
-  import('./components/VideosView').then((m) => ({ default: m.VideosView }))
+const MediaHubView = lazy(() =>
+  import('./components/MediaHubView').then((m) => ({ default: m.MediaHubView }))
 );
 const GeminiSummaryView = lazy(() =>
   import('./components/GeminiSummaryView').then((m) => ({ default: m.GeminiSummaryView }))
@@ -113,35 +109,30 @@ interface SidebarNavGroup {
 
 const SIDEBAR_GROUPS: SidebarNavGroup[] = [
   {
-    groupLabel: 'Aprender',
+    groupLabel: 'Ambiente do Estudante',
     items: [
-      { id: 'dashboard', label: 'Painel Inicial', icon: Home },
+      { id: 'dashboard', label: 'Início', icon: Home },
+      { id: 'disciplines', label: 'Conteúdo', icon: BookOpen },
+      { id: 'simulados', label: 'Questões', icon: CheckSquare },
+      { id: 'videos', label: 'Vídeos e Podcasts', icon: Video },
+    ],
+  },
+  {
+    groupLabel: 'Centrais & Apoio',
+    items: [
+      { id: 'materials', label: 'Central de Materiais', icon: FileText },
+      { id: 'portuguese_repo', label: 'Português (Prof. Fabrício)', icon: BookMarked },
       { id: 'classroom', label: 'Minhas Turmas & Aulas', icon: GraduationCap },
       { id: 'preparation', label: 'Minha Preparação', icon: Compass },
-      { id: 'disciplines', label: 'Disciplinas e Edital', icon: BookOpen },
-      { id: 'portuguese_repo', label: 'Português (Prof. Fabrício)', icon: BookOpen },
-      { id: 'study_room', label: 'Sala de Estudo', icon: BookMarked },
-      { id: 'materials', label: 'Central de Estudos', icon: FileText },
-      { id: 'videos', label: 'Videoaulas', icon: Video },
-      { id: 'podcasts', label: 'Podcasts & Spotify', icon: Headphones },
+      { id: 'schedule', label: 'Cronograma 2h', icon: CalendarDays },
+      { id: 'revisions', label: 'Revisões & Erros', icon: RotateCcw },
       { id: 'gemini', label: 'Professor IA', icon: Sparkles },
     ],
   },
   {
-    groupLabel: 'Praticar',
-    items: [{ id: 'simulados', label: 'Questões e Simulados', icon: CheckSquare }],
-  },
-  {
-    groupLabel: 'Evoluir',
+    groupLabel: 'Desempenho & Conta',
     items: [
-      { id: 'schedule', label: 'Cronograma 2h', icon: CalendarDays },
-      { id: 'revisions', label: 'Revisões & Erros', icon: RotateCcw },
       { id: 'performance', label: 'Desempenho', icon: BarChart3 },
-    ],
-  },
-  {
-    groupLabel: 'Conta',
-    items: [
       { id: 'family', label: 'Familiares', icon: Users },
       { id: 'settings', label: 'Configurações', icon: Settings },
     ],
@@ -321,16 +312,17 @@ function CampusShell() {
     icon: React.ComponentType<{ className?: string }>;
   }> = [
     { id: 'dashboard', label: 'Início', icon: Home },
-    { id: 'materials', label: 'Conteúdo', icon: FileText },
-    { id: 'schedule', label: 'Cronograma', icon: CalendarDays },
+    { id: 'disciplines', label: 'Conteúdo', icon: BookOpen },
     { id: 'simulados', label: 'Questões', icon: CheckSquare },
+    { id: 'videos', label: 'Vídeos', icon: Video },
   ];
 
   const isMoreTabActive =
     activeTab !== 'dashboard' &&
-    activeTab !== 'materials' &&
-    activeTab !== 'schedule' &&
-    activeTab !== 'simulados';
+    activeTab !== 'disciplines' &&
+    activeTab !== 'simulados' &&
+    activeTab !== 'videos' &&
+    activeTab !== 'podcasts';
 
   const mobileSheetItems: Array<{
     id: NavSection;
@@ -338,6 +330,30 @@ function CampusShell() {
     subtitle: string;
     icon: React.ComponentType<{ className?: string }>;
   }> = [
+    {
+      id: 'performance',
+      label: 'Desempenho',
+      subtitle: 'Evolução e progresso',
+      icon: BarChart3,
+    },
+    {
+      id: 'materials',
+      label: 'Central de Materiais',
+      subtitle: 'PDFs, apostilas e Drive',
+      icon: FileText,
+    },
+    {
+      id: 'schedule',
+      label: 'Cronograma 2h',
+      subtitle: 'Blocos diários e timer',
+      icon: CalendarDays,
+    },
+    {
+      id: 'revisions',
+      label: 'Revisões / Erros',
+      subtitle: 'Caderno espaçado',
+      icon: RotateCcw,
+    },
     {
       id: 'classroom',
       label: 'Minhas Turmas',
@@ -351,46 +367,16 @@ function CampusShell() {
       icon: Compass,
     },
     {
-      id: 'study_room',
-      label: 'Sala de Estudo',
-      subtitle: 'Flashcards, mapa e quiz',
+      id: 'portuguese_repo',
+      label: 'Português (Prof. Fabrício)',
+      subtitle: 'Aulas e textos exclusivos',
       icon: BookMarked,
-    },
-    {
-      id: 'disciplines',
-      label: 'Disciplinas & Edital',
-      subtitle: 'Tópicos e prioridades',
-      icon: BookOpen,
     },
     {
       id: 'gemini',
       label: 'Professor IA',
       subtitle: 'Resumos, cards e plano',
       icon: Sparkles,
-    },
-    {
-      id: 'podcasts',
-      label: 'Podcasts & Spotify',
-      subtitle: 'Áudios por matéria',
-      icon: Headphones,
-    },
-    {
-      id: 'videos',
-      label: 'Vídeos & Aulas',
-      subtitle: 'YouTube, IG e TikTok',
-      icon: Video,
-    },
-    {
-      id: 'revisions',
-      label: 'Revisões / Erros',
-      subtitle: 'Caderno espaçado',
-      icon: RotateCcw,
-    },
-    {
-      id: 'performance',
-      label: 'Desempenho',
-      subtitle: 'Evolução e simulados',
-      icon: BarChart3,
     },
     {
       id: 'family',
@@ -420,28 +406,26 @@ function CampusShell() {
               : activeTab === 'study_room'
                 ? 'Sala de Estudo'
                 : activeTab === 'disciplines'
-                  ? 'Disciplinas & Edital'
+                  ? 'Conteúdo · Disciplinas e Edital'
                   : activeTab === 'schedule'
                     ? 'Cronograma 2h'
                     : activeTab === 'simulados'
-                      ? 'Simulados e Questões'
+                      ? 'Questões · Banco e Simulados'
                       : activeTab === 'revisions'
                         ? 'Revisões / Erros'
-                        : activeTab === 'podcasts'
-                          ? 'Podcasts & Spotify'
-                          : activeTab === 'videos'
-                            ? 'Videoaulas'
-                            : activeTab === 'gemini'
-                              ? 'Professor IA & Resumos'
-                              : activeTab === 'materials'
-                                ? 'Central de Estudos'
-                                : activeTab === 'performance'
-                                  ? 'Desempenho'
-                                  : activeTab === 'family'
-                                    ? 'Familiares'
-                                    : activeTab === 'settings'
-                                      ? 'Configurações'
-                                      : 'Painel Inicial';
+                        : activeTab === 'podcasts' || activeTab === 'videos'
+                          ? 'Vídeos e Podcasts'
+                          : activeTab === 'gemini'
+                            ? 'Professor IA & Resumos'
+                            : activeTab === 'materials'
+                              ? 'Central de Materiais'
+                              : activeTab === 'performance'
+                                ? 'Desempenho'
+                                : activeTab === 'family'
+                                  ? 'Familiares'
+                                  : activeTab === 'settings'
+                                    ? 'Configurações'
+                                    : 'Início';
 
   const handleStartFocusTimer = (disciplineId: string, topicTitle: string) => {
     setTimerPreset({ disciplineId, topicTitle });
@@ -574,7 +558,7 @@ function CampusShell() {
               )}
               {group.items.map((item) => {
                 const Icon = item.icon;
-                const active = activeTab === item.id;
+                const active = activeTab === item.id || (item.id === 'videos' && activeTab === 'podcasts');
                 return (
                   <button
                     key={item.id}
@@ -916,6 +900,7 @@ function CampusShell() {
                 medioCargoGroup={selectedMedioCargo}
                 onChangeMedioCargoGroup={handleChangeMedioCargo}
                 onOpenStudyRoom={handleOpenStudyRoom}
+                onNavigate={navigateTo}
               />
             )}
             {activeTab === 'study_room' && (
@@ -946,10 +931,10 @@ function CampusShell() {
               <SimuladosView campus={selectedCampus} medioCargoGroup={selectedMedioCargo} />
             )}
             {activeTab === 'revisions' && <ErrorNotebookView campus={selectedCampus} />}
-            {activeTab === 'podcasts' && <PodcastsView campus={selectedCampus} />}
-            {activeTab === 'videos' && (
-              <VideosView
+            {(activeTab === 'videos' || activeTab === 'podcasts') && (
+              <MediaHubView
                 campus={selectedCampus}
+                initialTab={activeTab === 'podcasts' ? 'podcasts' : 'videos'}
                 onSummarizeWithGemini={(target) => {
                   setGeminiPreset(target);
                   navigateTo('gemini');
@@ -1251,7 +1236,7 @@ function CampusShell() {
       >
         {primaryMobileTabs.map((tab) => {
           const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
+          const isActive = activeTab === tab.id || (tab.id === 'videos' && activeTab === 'podcasts');
           return (
             <button
               key={tab.id}
